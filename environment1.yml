@@ -1,0 +1,32 @@
+name: deepLearnHWGeneral
+channels:
+  - conda-forge
+  - defaults
+  - anaconda
+dependencies:
+  #- cudnn==8.0.5.39=h36d860d_1 #works but hella slow
+  #- cudnn==8.0.5.39=h37a4af2_1 #works but hella slow
+  - cudnn==8.0.5.39=hfe7f257_1
+  - cudatoolkit
+  - cudnn
+  - pip
+  - graphviz
+  - pip:
+    - Keras
+    - Keras-Preprocessing
+    - kiwisolver
+    - matplotlib
+    - numpy
+    - opencv-python
+    - pandas
+    - scipy
+    - tensorboard
+    - tensorboard-plugin-wit
+    - tensorflow
+    - tensorflow-gpu
+    - tensorflow-estimator
+    - sklearn
+    - pydot
+    - nltk
+    - scikit-image
+
