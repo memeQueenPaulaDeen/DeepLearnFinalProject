@@ -1,3 +1,5 @@
+import copy
+
 import cv2 as cv
 import os
 import sys
@@ -6,6 +8,7 @@ import re
 import warnings
 import numpy as np
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 
 class imageHelper():
@@ -24,11 +27,9 @@ class imageHelper():
 
         # add our own labels # obsticle, grass, and road
         self.segLabelsDF = pd.read_csv(os.path.join(self.pwd,'classMap.csv'))
-        ObsticleList = ['Background','Building-flooded','Building-non-flooded',
-                        'Road-flooded','Water','Vehicle','Pool','Tree'] #every thing in this list gets labeled an opbsticel else the og name is kept
 
         self.segLabelsDF['Nav Class Name'] = self.segLabelsDF['Class Name']
-        self.segLabelsDF.loc[self.segLabelsDF['Class Name'].isin(ObsticleList),'Nav Class Name'] = 'Obstacle'
+        self.segLabelsDF.loc[~ self.segLabelsDF['Class Name'].isin(Weighting.keys()),'Nav Class Name'] = 'Obstacle'
         self.segLabelsDF['nav Weight'] =  self.segLabelsDF['Nav Class Name'].apply(lambda x: Weighting[x]) # add the weighting definied as a param to this class
 
         ### define the start and stop locations for each of the pics
@@ -200,46 +201,141 @@ class imageHelper():
 
         return result
 
-    def plotImgAndMask(self,img:str):
-        i, mask = self.getImageMaskPair(img)
+    def getStartAndStopLocForImag(self,img):
         simg = self.df.loc[self.df.img == img]
-        div = 4
-        xidx = 1
-        yidx = 0
-
-        FullColorMask = self.getColorForSegMap(mask)
-        both = np.concatenate((cv.resize(i,(i.shape[xidx]//div,i.shape[yidx]//div)),
-                               cv.resize(FullColorMask,(FullColorMask.shape[xidx]//div,FullColorMask.shape[yidx]//div))),
-                              axis=1)
-
-        name = 'original image left, segmented right for '+ img
-
         sx = int(simg.sx.values[0])
         sy = int(simg.sy.values[0])
         ex = int(simg.ex.values[0])
         ey = int(simg.ey.values[0])
 
+        return sx,sy,ex,ey
+
+    def plotImgAndMask(self,img:str):
+        i, mask = self.getImageMaskPair(img)
+        sx, sy, ex, ey = self.getStartAndStopLocForImag(img)
+
+        div = 4
+        xidx = 1
+        yidx = 0
+
+        FullColorMask = self.getColorForSegMap(mask)
+        both = np.concatenate((cv.resize(i,(i.shape[xidx],i.shape[yidx])),
+                               cv.resize(FullColorMask,(FullColorMask.shape[xidx],FullColorMask.shape[yidx]))),
+                              axis=1)
+
+        name = 'original image left, segmented right for '+ img
+
         font = cv.FONT_HERSHEY_SIMPLEX
         cv.putText(both, "s", (sx, sy), font,
                    1, (255, 0, 0), 2)
-        cv.putText(both, "s", (sx+i.shape[xidx]//div, sy), font,
+        cv.putText(both, "s", (sx+i.shape[xidx], sy), font,
                    1, (255, 0, 0), 2)
 
         cv.putText(both, "E", (ex, ey), font,
                    1, (255, 0, 0), 2)
-        cv.putText(both, "E", (ex + i.shape[xidx] // div, ey), font,
+        cv.putText(both, "E", (ex + i.shape[xidx], ey), font,
                    1, (255, 0, 0), 2)
 
         cv.imshow(name, both)
 
         cv.waitKey(0)
 
-    def getImageMaskPair(self,img:str,EnforcedX = 4000,EnforcedY = 3000) -> (np.array, np.array):
+    def getImageMaskPair(self,img:str,div = 4,EnforcedX = 4000,EnforcedY = 3000) -> (np.array, np.array):
         irow = self.df.loc[self.df.img == img]
         img = cv.imread(irow.imgLoc.values[0])
         mask = cv.imread(irow['maskLoc'].values[0],cv.IMREAD_GRAYSCALE)
         # the images are not all exactly the same scale them to a fixed size before returning
-        return cv.resize(img,(EnforcedX,EnforcedY)), cv.resize(mask,(EnforcedX,EnforcedY))
+        return cv.resize(img,(EnforcedX//div,EnforcedY//div)), cv.resize(mask,(EnforcedX//div,EnforcedY//div))
+
+    def getValidBorderingIdx(self, col, row, mask, costMap):
+
+        result = []
+        colIdx, rowIdx = 1,0
+
+        #check left idx good
+        if col - 1 >= 0:
+            nextCost = self.getCost(col-1,row,mask,costMap[row,col]) #todo: need to be able to accept any arbitrary weight array.
+
+            #we found a better value so we update the wavefront and cost map
+            if costMap[row,col-1] > nextCost:
+                result.append((col - 1, row,nextCost))
+
+        #check if right idx good
+        if col+1 < costMap.shape[colIdx]:
+            nextCost = self.getCost(col+1,row,mask,costMap[row,col])
+
+            if costMap[row,col+1] > nextCost:
+                result.append((col + 1, row,nextCost))
+
+        #check up
+        if row-1 >= 0:
+            nextCost = self.getCost(col,row-1,mask,costMap[row,col])
+
+            if costMap[row-1,col] > nextCost:
+                result.append((col, row - 1,nextCost))
+        #check down
+        if row+1 < costMap.shape[rowIdx]:
+            nextCost = self.getCost(col,row+1,mask,costMap[row,col])
+
+            if costMap[row+1,col] > nextCost:
+                result.append((col, row + 1,nextCost))
+
+        return result
+
+
+    def getCost(self,newCol,newRow,mask,currentCost):
+        stepCost = self.segLabelsDF['nav Weight'][mask[newRow,newCol]]
+        return currentCost + stepCost
+
+    def getWaveFrontCostForMask(self,img):
+
+        xidx, yidx = 1, 0
+
+        #Increase efficency by downsample then upsample
+
+        i, mask = self.getImageMaskPair(img)
+        sx, sy, ex, ey = self.getStartAndStopLocForImag(img)
+
+        downSample = 4
+
+        waveFront = set()
+        initVal = 9999999999999
+        costMap = np.ones((mask.shape[yidx]//downSample,mask.shape[xidx]//downSample)) * initVal
+
+        costMap[ey//downSample,ex//downSample] = 0
+        waveFront.add((ex//downSample,ey//downSample,0))
+
+        count = 0
+        while len(waveFront) > 0:
+            col, row, currentCost = waveFront.pop()
+            for trip in self.getValidBorderingIdx(col, row, cv.resize(mask,(mask.shape[xidx]//downSample,mask.shape[yidx]//downSample),interpolation=cv.INTER_NEAREST),costMap):
+                waveFront.add(trip)
+                # update cost map
+                c, r, d = trip
+                costMap[r,c] = d
+
+
+            if count % 1000 == 0:
+
+
+                hm = copy.deepcopy(costMap)
+                hm[hm==initVal] = hm[hm!=initVal].max()
+                hm = hm/hm.max()*255
+                hm = cv.applyColorMap(hm.astype('uint8'), cv.COLORMAP_HOT)
+                hm = cv.resize(hm,(mask.shape[xidx],mask.shape[yidx]),interpolation=cv.INTER_NEAREST)
+                cv.imshow('heatMap for ' + img,hm)
+                cv.waitKey(1)
+                #cv.destroyAllWindows()
+                print(count)
+
+            count = count+1
+
+        cv.waitKey(0)
+        costMap = cv.resize(costMap,(mask.shape[xidx],mask.shape[yidx]),interpolation=cv.INTER_NEAREST)
+
+        return costMap
+
+
 
 
 if __name__ == '__main__':
@@ -253,11 +349,16 @@ if __name__ == '__main__':
 
 
     Weighting = {
-        'Obstacle': 500,
+        'Obstacle': 5000,
+        'Tree': 300,
         'Grass': 50,
         'Road-non-flooded': 1
     }
 
     ih = imageHelper(Weighting,GenerateStartStop=False)
     #print(ih.df)
-    ih.plotImgAndMask('6706.jpg')
+    # ih.plotImgAndMask('6706.jpg')
+    # ih.getWaveFrontCostForMask('6706.jpg')
+
+    ih.plotImgAndMask('7049.jpg')
+    ih.getWaveFrontCostForMask('7049.jpg')
