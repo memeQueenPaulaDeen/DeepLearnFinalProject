@@ -443,9 +443,11 @@ class imageHelper():
 
         X_trainDir = os.path.join(self.pwd, 'X_Train')
         Y_trainDir = os.path.join(self.pwd,'Y_Train')
+        Y_trainNormDir = os.path.join(self.pwd,'Y_TrainNorm')
         Y_trainBlurDir = os.path.join(self.pwd,'Y_TrainBlur')
+        Y_trainNormBlurDir = os.path.join(self.pwd,'Y_TrainNormBlur')
 
-        dirs = [X_trainDir,Y_trainDir,Y_trainBlurDir]
+        dirs = [X_trainDir,Y_trainDir,Y_trainNormDir,Y_trainBlurDir,Y_trainNormBlurDir]
 
         AllExist = True
         for dir in dirs:
@@ -454,17 +456,23 @@ class imageHelper():
 
         if not AllExist or regen:
             print('SAVE XY')
-            self.df.img.apply(lambda img: self.saveXY(img,X_trainDir,Y_trainDir,normalize=True,blurKsize=1))
+            self.df.img.apply(lambda img: self.saveXY(img,X_trainDir,Y_trainDir,normalize=False,blurKsize=1))
+
+            print('SAVE X, Y normalized')
+            self.df.img.apply(lambda img: self.saveXY(img,X_trainDir,Y_trainNormDir,normalize=True,blurKsize=1))
 
             print('SAVE X, Y blurred')
-            self.df.img.apply(lambda img: self.saveXY(img,X_trainDir,Y_trainBlurDir,normalize=True,blurKsize=5))
+            self.df.img.apply(lambda img: self.saveXY(img,X_trainDir,Y_trainBlurDir,normalize=False,blurKsize=5))
+
+            print('SAVE X, Y normalized and blurred')
+            self.df.img.apply(lambda img: self.saveXY(img,X_trainDir,Y_trainNormBlurDir,normalize=True,blurKsize=5))
 
 
 
     def saveXY(self,img,X_trainDir,Y_trainDir,normalize = True,blurKsize = 1):
         x,y = self.getTrainEx(img,normalize=normalize,blurKsize=blurKsize)
         cv.imwrite(os.path.join(X_trainDir,img),x)
-        cv.imwrite(os.path.join(Y_trainDir,img),y)
+        np.save(os.path.join(Y_trainDir,img.split('.')[0]),y)
 
 
 
