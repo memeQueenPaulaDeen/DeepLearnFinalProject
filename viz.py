@@ -300,15 +300,18 @@ class imageHelper():
 
         return currentCost + stepCost
 
-    def getWaveFrontCostForMask(self, img,x, y,plottingUpSample=4):
+    def getWaveFrontCostForMask(self, img,x, y,plottingUpSample=2):
 
         xidx, yidx = 1, 0
 
         #Increase efficency by downsample then upsample
         i, mask = self.getImageMaskPair(img)
-        row = self.defineEndPoints(i,mask,1,img)
+        row = self.defineEndPoints(cv.resize(i,(i.shape[xidx]*plottingUpSample,i.shape[yidx]*plottingUpSample)),
+                                   cv.resize(mask,(mask.shape[xidx]*plottingUpSample,mask.shape[yidx]*plottingUpSample)),
+                                   1,
+                                   img)
 
-        sx, sy, ex, ey = row['sx'], row['sy'], row['ex'], row['ey']
+        sx, sy, ex, ey = row['sx']//plottingUpSample, row['sy']//plottingUpSample, row['ex']//plottingUpSample, row['ey']//plottingUpSample
 
 
         waveFront = set()
@@ -335,7 +338,7 @@ class imageHelper():
                 hm[hm==initVal] = hm[hm!=initVal].max()
                 hm = hm/hm.max()*255
                 hm = cv.applyColorMap(hm.astype('uint8'), cv.COLORMAP_HOT)
-                cv.imshow('heatMap for ' + img,hm)
+                cv.imshow('heatMap for ' + img,cv.resize(hm,(hm.shape[xidx]*plottingUpSample,hm.shape[yidx]*plottingUpSample)))
                 cv.waitKey(1)
                 #cv.destroyAllWindows()
                 print(count)
@@ -361,16 +364,16 @@ class imageHelper():
 
             font = cv.FONT_HERSHEY_SIMPLEX
             cv.putText(both, "s", (sx, sy), font,
-                       1, (255, 0, 0), 2)
+                       1, (55, 255, 55), 2)
             cv.putText(both, "s", (sx + x.shape[xidx], sy), font,
-                       1, (255, 0, 0), 2)
+                       1, (55, 255, 55), 2)
 
             cv.putText(both, "E", (ex, ey), font,
-                       1, (255, 0, 0), 2)
+                       1, (55, 255, 55), 2)
             cv.putText(both, "E", (ex + x.shape[xidx], ey), font,
-                       1, (255, 0, 0), 2)
+                       1, (55, 255, 55), 2)
 
-            cv.imshow(name, both)
+            cv.imshow(name, cv.resize(both,(both.shape[xidx]*plottingUpSample,both.shape[yidx]*plottingUpSample)))
 
             cv.waitKey(1)
 
@@ -436,14 +439,38 @@ class imageHelper():
 
         return X, Y_gt
 
+    def saveTrainingExamples(self,regen=False):
+
+        X_trainDir = os.path.join(self.pwd, 'X_Train')
+        Y_trainDir = os.path.join(self.pwd,'Y_Train')
+        Y_trainBlurDir = os.path.join(self.pwd,'Y_TrainBlur')
+
+        dirs = [X_trainDir,Y_trainDir,Y_trainBlurDir]
+
+        AllExist = True
+        for dir in dirs:
+            AllExist = AllExist and os.path.exists(dir)
+            Path(dir).mkdir(parents=True, exist_ok=True)
+
+        if not AllExist or regen:
+            print('SAVE XY')
+            self.df.img.apply(lambda img: self.saveXY(img,X_trainDir,Y_trainDir,normalize=True,blurKsize=1))
+
+            print('SAVE X, Y blurred')
+            self.df.img.apply(lambda img: self.saveXY(img,X_trainDir,Y_trainBlurDir,normalize=True,blurKsize=5))
+
+
+
+    def saveXY(self,img,X_trainDir,Y_trainDir,normalize = True,blurKsize = 1):
+        x,y = self.getTrainEx(img,normalize=normalize,blurKsize=blurKsize)
+        cv.imwrite(os.path.join(X_trainDir,img),x)
+        cv.imwrite(os.path.join(Y_trainDir,img),y)
+
 
 
 if __name__ == '__main__':
 
-    #todo decide on final image size assuimging training image is reduced to w//4, h//4
-    #todo Impelment modified wave front
-    #todo create heat map function show the travel cost given a start and end point
-    #todo find a good set of weights for the classes probably dont want to count tree conver as an obsticle anymore
+    #todo eventually will need to extend to show ground truth vs pred
     #todo implement generators for the input image (rescale) and output, predicted weight map.
     #todo either need to find a way to do transfer learning or use the semi supervised methods disccused in class
 
@@ -455,11 +482,12 @@ if __name__ == '__main__':
         'Road-non-flooded': 1
     }
 
-    ih = imageHelper(Weighting,GenerateStartStop=False,div=16)
-    #print(ih.df)
-    # ih.plotImgAndMask('6706.jpg')
-    # ih.getWaveFrontCostForMask('6706.jpg')
+    ih = imageHelper(Weighting,GenerateStartStop=False,div=12)
+    ih.saveTrainingExamples(regen=False)
 
-    #ih.plotImgAndMask('6615.jpg')
-    x,y = ih.getTrainEx('6615.jpg',normalize=False)
+    #print(ih.df)
+    # x, y = ih.getTrainEx('8482.jpg', normalize=True,blurKsize=5)
+    # ih.getWaveFrontCostForMask('8482.jpg', x, y)
+
+    x,y = ih.getTrainEx('6615.jpg',normalize=False,blurKsize=5)
     ih.getWaveFrontCostForMask('6615.jpg',x,y)
