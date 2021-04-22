@@ -14,8 +14,9 @@ import matplotlib.pyplot as plt
 class imageHelper():
     # the final purpose of this class will probably be to create image generators for training and visualisations
 
-    def __init__(self, Weighting, GenerateStartStop=False):
+    def __init__(self, Weighting, GenerateStartStop=False,div = 8):
         self.pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
+        self.div = div
 
         floodPath = os.path.join(self.pwd,'Labeled','Flooded')
         NonfloodPath = os.path.join(self.pwd,'Labeled','Non-Flooded')
@@ -31,6 +32,7 @@ class imageHelper():
         self.segLabelsDF['Nav Class Name'] = self.segLabelsDF['Class Name']
         self.segLabelsDF.loc[~ self.segLabelsDF['Class Name'].isin(Weighting.keys()),'Nav Class Name'] = 'Obstacle'
         self.segLabelsDF['nav Weight'] =  self.segLabelsDF['Nav Class Name'].apply(lambda x: Weighting[x]) # add the weighting definied as a param to this class
+        self.scaleing = self.segLabelsDF['nav Weight'].max()
 
         ### define the start and stop locations for each of the pics
         startStopLoc = os.path.join(self.pwd,'startStop.csv')
@@ -44,6 +46,62 @@ class imageHelper():
         self.df['ex'] = ssdf['ex']
         self.df['ey'] = ssdf['ey']
 
+    def defineEndPoints(self,i,mask,div,img):
+
+        xidx = 1
+        yidx = 0
+
+        FullColorMask = self.getColorForSegMap(mask)
+        both = np.concatenate((cv.resize(i, (i.shape[xidx] // div, i.shape[yidx] // div)),
+                               cv.resize(FullColorMask,
+                                         (FullColorMask.shape[xidx] // div, FullColorMask.shape[yidx] // div))),
+                              axis=1)
+
+        name = 'original image left, segmented right for ' + img
+        cv.imshow(name, both)
+
+        startStopArr = [(-1, -1), (-1, 1)]
+
+        def handleClickEvent(event, x, y, flags, params):
+            # see https://www.geeksforgeeks.org/displaying-the-coordinates-of-the-points-clicked-on-the-image-using-python-opencv/
+
+            # checking for left mouse clicks
+            if event == cv.EVENT_LBUTTONDOWN:
+                # displaying the coordinates
+                # on the image window
+                font = cv.FONT_HERSHEY_SIMPLEX
+                cv.putText(both, "start: " + str(x) + ',' +
+                           str(y), (x, y), font,
+                           1, (255, 0, 0), 2)
+                startStopArr[0] = (x, y)
+                cv.imshow(name, both)
+
+            # checking for right mouse clicks
+            if event == cv.EVENT_RBUTTONDOWN:
+                # displaying the coordinates
+                # on the Shell
+
+                # displaying the coordinates
+                # on the image window
+                font = cv.FONT_HERSHEY_SIMPLEX
+                cv.putText(both, "end: " + str(x) + ',' +
+                           str(y), (x, y), font,
+                           1, (0, 0, 255), 2)
+                startStopArr[1] = (x, y)
+                cv.imshow(name, both)
+
+        cv.setMouseCallback(name, handleClickEvent)
+
+        cv.waitKey(0)
+        cv.destroyAllWindows()
+
+        assert startStopArr != [(-1, -1), (-1, 1)], 'failed to update start Loc'
+        row = {'img': img,
+               'sx': startStopArr[0][0],
+               'sy': startStopArr[0][1],
+               'ex': startStopArr[1][0],
+               'ey': startStopArr[1][1], }
+        return row
 
     def runStartStopHelper(self,startStopLoc):
 
@@ -55,59 +113,9 @@ class imageHelper():
 
             i, mask = self.getImageMaskPair(img)
             div = 4
-            xidx = 1
-            yidx = 0
 
-            FullColorMask = self.getColorForSegMap(mask)
-            both = np.concatenate((cv.resize(i, (i.shape[xidx] // div, i.shape[yidx] // div)),
-                                   cv.resize(FullColorMask,
-                                             (FullColorMask.shape[xidx] // div, FullColorMask.shape[yidx] // div))),
-                                  axis=1)
+            row = self.defineEndPoints(i,mask,div,img)
 
-            name = 'original image left, segmented right for ' + img
-            cv.imshow(name, both)
-
-            startStopArr = [(-1, -1), (-1, 1)]
-
-            def handleClickEvent(event, x, y, flags, params):
-                # see https://www.geeksforgeeks.org/displaying-the-coordinates-of-the-points-clicked-on-the-image-using-python-opencv/
-
-                # checking for left mouse clicks
-                if event == cv.EVENT_LBUTTONDOWN:
-                    # displaying the coordinates
-                    # on the image window
-                    font = cv.FONT_HERSHEY_SIMPLEX
-                    cv.putText(both, "start: " + str(x) + ',' +
-                               str(y), (x, y), font,
-                               1, (255, 0, 0), 2)
-                    startStopArr[0] = (x,y)
-                    cv.imshow(name, both)
-
-                # checking for right mouse clicks
-                if event == cv.EVENT_RBUTTONDOWN:
-                    # displaying the coordinates
-                    # on the Shell
-
-                    # displaying the coordinates
-                    # on the image window
-                    font = cv.FONT_HERSHEY_SIMPLEX
-                    cv.putText(both, "end: " + str(x) + ',' +
-                               str(y), (x, y), font,
-                               1, (0, 0, 255), 2)
-                    startStopArr[1] = (x, y)
-                    cv.imshow(name, both)
-
-            cv.setMouseCallback(name, handleClickEvent)
-
-            cv.waitKey(0)
-            cv.destroyAllWindows()
-
-            assert startStopArr != [(-1, -1), (-1, 1)], 'failed to update start Loc'
-            row = {'img':img,
-                    'sx':startStopArr[0][0],
-                   'sy':startStopArr[0][1],
-                   'ex':startStopArr[1][0],
-                   'ey':startStopArr[1][1],}
             LocationDf = LocationDf.append(row,ignore_index=True)
 
             LocationDf.to_csv(startStopLoc)
@@ -214,7 +222,6 @@ class imageHelper():
         i, mask = self.getImageMaskPair(img)
         sx, sy, ex, ey = self.getStartAndStopLocForImag(img)
 
-        div = 4
         xidx = 1
         yidx = 0
 
@@ -240,12 +247,14 @@ class imageHelper():
 
         cv.waitKey(0)
 
-    def getImageMaskPair(self,img:str,div = 4,EnforcedX = 4000,EnforcedY = 3000) -> (np.array, np.array):
+    def getImageMaskPair(self,img:str,EnforcedX = 4000,EnforcedY = 3000) -> (np.array, np.array):
         irow = self.df.loc[self.df.img == img]
         img = cv.imread(irow.imgLoc.values[0])
         mask = cv.imread(irow['maskLoc'].values[0],cv.IMREAD_GRAYSCALE)
-        # the images are not all exactly the same scale them to a fixed size before returning
-        return cv.resize(img,(EnforcedX//div,EnforcedY//div)), cv.resize(mask,(EnforcedX//div,EnforcedY//div))
+        # the images are not all the same size as the 4000x3000 mask crop image to match
+        img = img[0:EnforcedY,0:EnforcedX]
+        # resize for reasonable plot
+        return cv.resize(img,(EnforcedX//self.div,EnforcedY//self.div)), cv.resize(mask,(EnforcedX//self.div,EnforcedY//self.div))
 
     def getValidBorderingIdx(self, col, row, mask, costMap):
 
@@ -284,31 +293,35 @@ class imageHelper():
 
 
     def getCost(self,newCol,newRow,mask,currentCost):
-        stepCost = self.segLabelsDF['nav Weight'][mask[newRow,newCol]]
+        stepCost = mask[newRow,newCol]
+        # detect normilized cost map
+        # if scaled:
+        #     stepCost = stepCost * self.scaleing
+
         return currentCost + stepCost
 
-    def getWaveFrontCostForMask(self,img):
+    def getWaveFrontCostForMask(self, img,x, y,plottingUpSample=4):
 
         xidx, yidx = 1, 0
 
         #Increase efficency by downsample then upsample
-
         i, mask = self.getImageMaskPair(img)
-        sx, sy, ex, ey = self.getStartAndStopLocForImag(img)
+        row = self.defineEndPoints(i,mask,1,img)
 
-        downSample = 4
+        sx, sy, ex, ey = row['sx'], row['sy'], row['ex'], row['ey']
+
 
         waveFront = set()
         initVal = 9999999999999
-        costMap = np.ones((mask.shape[yidx]//downSample,mask.shape[xidx]//downSample)) * initVal
+        costMap = np.ones((y.shape[yidx], y.shape[xidx])) * initVal
 
-        costMap[ey//downSample,ex//downSample] = 0
-        waveFront.add((ex//downSample,ey//downSample,0))
+        costMap[ey,ex] = 0
+        waveFront.add((ex,ey,0))
 
         count = 0
         while len(waveFront) > 0:
             col, row, currentCost = waveFront.pop()
-            for trip in self.getValidBorderingIdx(col, row, cv.resize(mask,(mask.shape[xidx]//downSample,mask.shape[yidx]//downSample),interpolation=cv.INTER_NEAREST),costMap):
+            for trip in self.getValidBorderingIdx(col, row, cv.resize(y, (y.shape[xidx], y.shape[yidx])), costMap):#,interpolation=cv.INTER_NEAREST),costMap):
                 waveFront.add(trip)
                 # update cost map
                 c, r, d = trip
@@ -322,7 +335,6 @@ class imageHelper():
                 hm[hm==initVal] = hm[hm!=initVal].max()
                 hm = hm/hm.max()*255
                 hm = cv.applyColorMap(hm.astype('uint8'), cv.COLORMAP_HOT)
-                hm = cv.resize(hm,(mask.shape[xidx],mask.shape[yidx]),interpolation=cv.INTER_NEAREST)
                 cv.imshow('heatMap for ' + img,hm)
                 cv.waitKey(1)
                 #cv.destroyAllWindows()
@@ -331,10 +343,98 @@ class imageHelper():
             count = count+1
 
         cv.waitKey(0)
-        costMap = cv.resize(costMap,(mask.shape[xidx],mask.shape[yidx]),interpolation=cv.INTER_NEAREST)
+        cv.destroyAllWindows()
+
+        both = np.concatenate((x,hm),axis=1)
+        pathColor = (247,5,239)#pink
+
+        pos = (sx,sy)
+
+        while pos != (ex,ey):
+            xpos = pos[0]
+            ypos = pos[1]
+            both[ypos,xpos] = pathColor
+            both[ypos,xpos+x.shape[xidx]] = pathColor
+            pos = self.gradDesc(xpos,ypos,costMap)
+
+            name = 'original image left, distance to goal on right for ' + img
+
+            font = cv.FONT_HERSHEY_SIMPLEX
+            cv.putText(both, "s", (sx, sy), font,
+                       1, (255, 0, 0), 2)
+            cv.putText(both, "s", (sx + x.shape[xidx], sy), font,
+                       1, (255, 0, 0), 2)
+
+            cv.putText(both, "E", (ex, ey), font,
+                       1, (255, 0, 0), 2)
+            cv.putText(both, "E", (ex + x.shape[xidx], ey), font,
+                       1, (255, 0, 0), 2)
+
+            cv.imshow(name, both)
+
+            cv.waitKey(1)
+
+        cv.waitKey(0)
+        cv.destroyAllWindows()
 
         return costMap
 
+    def gradDesc(self,col,row,costMap):
+
+        result = []
+        colIdx, rowIdx = 1, 0
+
+        # check left idx good
+        if col - 1 >= 0:
+            nextCost = costMap[row,col-1]
+            # we found a better value so we update the wavefront and cost map
+            if costMap[row, col] > nextCost:
+                result.append((col - 1, row, nextCost))
+
+        # check if right idx good
+        if col + 1 < costMap.shape[colIdx]:
+            nextCost = costMap[row, col+1]
+
+            if costMap[row, col] > nextCost:
+                result.append((col + 1, row, nextCost))
+
+        # check up
+        if row - 1 >= 0:
+            nextCost = costMap[row-1, col]
+
+            if costMap[row, col] > nextCost:
+                result.append((col, row - 1, nextCost))
+        # check down
+        if row + 1 < costMap.shape[rowIdx]:
+            nextCost =  costMap[row+1, col]
+
+            if costMap[row, col] > nextCost:
+                result.append((col, row + 1, nextCost))
+
+
+        if len(result) == 0:
+            w = RuntimeWarning('lower cost not found downsampling for wavefront may be to agressive')
+            warnings.warn(w)
+            result = (col+np.random.randint(0,2),row+np.random.randint(0,2))
+        else:
+            result = result[np.random.randint(0,len(result))]
+
+        return result
+
+    def getTrainEx(self,img,normalize = True,blurKsize = 1) -> tuple:
+        X, mask = self.getImageMaskPair(img)
+        ClassToWeightMapping = self.segLabelsDF['nav Weight'].to_dict()
+        Y_gt = np.zeros((mask.shape[0], mask.shape[1]))
+
+        for m in ClassToWeightMapping.keys():
+            Y_gt[mask == m] = ClassToWeightMapping[m]
+
+        if normalize:
+            Y_gt = Y_gt/self.scaleing
+
+        Y_gt = cv.blur(Y_gt,(blurKsize,blurKsize))
+
+        return X, Y_gt
 
 
 
@@ -355,10 +455,11 @@ if __name__ == '__main__':
         'Road-non-flooded': 1
     }
 
-    ih = imageHelper(Weighting,GenerateStartStop=False)
+    ih = imageHelper(Weighting,GenerateStartStop=False,div=16)
     #print(ih.df)
     # ih.plotImgAndMask('6706.jpg')
     # ih.getWaveFrontCostForMask('6706.jpg')
 
-    ih.plotImgAndMask('7049.jpg')
-    ih.getWaveFrontCostForMask('7049.jpg')
+    #ih.plotImgAndMask('6615.jpg')
+    x,y = ih.getTrainEx('6615.jpg',normalize=False)
+    ih.getWaveFrontCostForMask('6615.jpg',x,y)
