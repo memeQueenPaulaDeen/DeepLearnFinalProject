@@ -1,4 +1,5 @@
 import copy
+import math
 
 import cv2 as cv
 import os
@@ -247,14 +248,35 @@ class imageHelper():
 
         cv.waitKey(0)
 
-    def getImageMaskPair(self,img:str,EnforcedX = 4000,EnforcedY = 3000) -> (np.array, np.array):
+    def getImageMaskPair(self,img:str,EnforcedX = 2944,EnforcedY = 2944,crop = 'center') -> (np.array, np.array):
         irow = self.df.loc[self.df.img == img]
         img = cv.imread(irow.imgLoc.values[0])
         mask = cv.imread(irow['maskLoc'].values[0],cv.IMREAD_GRAYSCALE)
         # the images are not all the same size as the 4000x3000 mask crop image to match
-        img = img[0:EnforcedY,0:EnforcedX]
+
+        assert crop == 'center' or crop == 'left' or crop == 'right'
+        if crop == 'left':
+            img = img[0:EnforcedY,0:EnforcedX]
+            mask = mask[0:EnforcedY,0:EnforcedX]
+        if crop == 'center':
+            cx = mask.shape[1]//2
+            cy = mask.shape[0]//2
+
+            img = img[cy-math.floor(EnforcedY/2):cy+math.ceil(EnforcedY/2),
+                      cx-math.floor(EnforcedX/2):cx+math.ceil(EnforcedX/2)]
+            mask = mask[cy - math.floor(EnforcedY / 2):cy + math.ceil(EnforcedY / 2),
+                  cx - math.floor(EnforcedX / 2):cx + math.ceil(EnforcedX / 2)]
+        if crop == 'right':
+            img = img[mask.shape[0] - 1 - EnforcedY:mask.shape[0] - 1,
+                  mask.shape[1] - 1 - EnforcedX:mask.shape[1] - 1]
+            mask = mask[mask.shape[0] - 1 - EnforcedY:mask.shape[0] - 1,
+                  mask.shape[1] - 1 - EnforcedX:mask.shape[1] - 1]
+
+        assert img.shape[1] == EnforcedX and img.shape[0] == EnforcedY and \
+               mask.shape[1] == EnforcedX and mask.shape[0] == EnforcedY
+
         # resize for reasonable plot
-        return cv.resize(img,(EnforcedX//self.div,EnforcedY//self.div)), cv.resize(mask,(EnforcedX//self.div,EnforcedY//self.div))
+        return cv.resize(img,(int(EnforcedX//self.div),int(EnforcedY//self.div))), cv.resize(mask,(int(EnforcedX//self.div),int(EnforcedY//self.div)))
 
     def getValidBorderingIdx(self, col, row, mask, costMap):
 
@@ -424,8 +446,8 @@ class imageHelper():
 
         return result
 
-    def getTrainEx(self,img,normalize = True,blurKsize = 1) -> tuple:
-        X, mask = self.getImageMaskPair(img)
+    def getTrainEx(self,img,normalize = True,blurKsize = 1,crop = 'center') -> tuple:
+        X, mask = self.getImageMaskPair(img,crop = crop)
         ClassToWeightMapping = self.segLabelsDF['nav Weight'].to_dict()
         Y_gt = np.zeros((mask.shape[0], mask.shape[1]))
 
@@ -441,7 +463,7 @@ class imageHelper():
 
     def saveTrainingExamples(self,regen=False):
 
-        X_trainDir = os.path.join(self.pwd, 'X_Train')
+        X_trainDir = os.path.join(self.pwd, 'X_Train/data')
         Y_trainDir = os.path.join(self.pwd,'Y_Train')
         Y_trainNormDir = os.path.join(self.pwd,'Y_TrainNorm')
         Y_trainBlurDir = os.path.join(self.pwd,'Y_TrainBlur')
@@ -470,9 +492,20 @@ class imageHelper():
 
 
     def saveXY(self,img,X_trainDir,Y_trainDir,normalize = True,blurKsize = 1):
-        x,y = self.getTrainEx(img,normalize=normalize,blurKsize=blurKsize)
-        cv.imwrite(os.path.join(X_trainDir,img),x)
-        np.save(os.path.join(Y_trainDir,img.split('.')[0]),y)
+        imgPart = img.split('.')[0]
+        ext = img.split('.')[1]
+
+        x, y = self.getTrainEx(img, normalize=normalize, blurKsize=blurKsize, crop='left')
+        cv.imwrite(os.path.join(X_trainDir,imgPart+'l.'+ext),x)
+        np.save(os.path.join(Y_trainDir,img.split('.')[0]+'l'),y)
+
+        x, y = self.getTrainEx(img, normalize=normalize, blurKsize=blurKsize, crop='center')
+        cv.imwrite(os.path.join(X_trainDir, imgPart + 'c.' + ext), x)
+        np.save(os.path.join(Y_trainDir, img.split('.')[0] + 'c'), y)
+
+        x, y = self.getTrainEx(img, normalize=normalize, blurKsize=blurKsize, crop='right')
+        cv.imwrite(os.path.join(X_trainDir, imgPart + 'r.' + ext), x)
+        np.save(os.path.join(Y_trainDir, img.split('.')[0] + 'r'), y)
 
 
 
@@ -490,7 +523,7 @@ if __name__ == '__main__':
         'Road-non-flooded': 1
     }
 
-    ih = imageHelper(Weighting,GenerateStartStop=False,div=12)
+    ih = imageHelper(Weighting,GenerateStartStop=False,div=5.75)
     ih.saveTrainingExamples(regen=False)
 
     #print(ih.df)
@@ -498,4 +531,4 @@ if __name__ == '__main__':
     # ih.getWaveFrontCostForMask('8482.jpg', x, y)
 
     x,y = ih.getTrainEx('6615.jpg',normalize=False,blurKsize=5)
-    ih.getWaveFrontCostForMask('6615.jpg',x,y)
+    ih.getWaveFrontCostForMask('6615.jpg',x,y,plottingUpSample=1)
