@@ -5,8 +5,8 @@ import numpy as np
 from pickle import dump
 from keras.preprocessing.image import load_img
 import keras as k
-from keras.layers import Input, Dense, Conv2D, BatchNormalization, Add
-from keras.layers import Activation, Dropout, MaxPooling2D, AveragePooling2D, Flatten, concatenate, UpSampling2D
+from keras.layers import Input, Dense, Conv2D, BatchNormalization, Add, Conv2DTranspose
+from keras.layers import Activation, Dropout, MaxPooling2D, LeakyReLU ,AveragePooling2D, Flatten, concatenate, UpSampling2D
 from keras.models import Model, load_model
 from keras.optimizers import SGD, Adam, Adagrad, RMSprop, schedules
 from keras.datasets import cifar10
@@ -26,7 +26,7 @@ tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
 def getGen(XDir,yDir,batchSize,inputShape):
-    tg = k.preprocessing.image.ImageDataGenerator(validation_split=.02)
+    tg = k.preprocessing.image.ImageDataGenerator(validation_split=.2)
     trainSet = tg.flow_from_directory(XDir,
                                       target_size=inputShape[0:-1],
                                       batch_size=batch_size,
@@ -46,7 +46,7 @@ def getGen(XDir,yDir,batchSize,inputShape):
     valItrPerEpoch = int(len(valSet.classes) / valSet.batch_size)
 
     def generator_train():
-        tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2,channel_shift_range=.4)
+        tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2)#,channel_shift_range=.4)
 
         trainGen = tg1.flow_from_directory(XDir,
                                           target_size=inputShape[0:-1],
@@ -66,6 +66,9 @@ def getGen(XDir,yDir,batchSize,inputShape):
             for fname in fnames:
                 y.append( [np.load(fname).transpose()])
             y = np.concatenate(y)
+
+            #if categorical
+            y = (np.arange(y.max()+1) == y[...,None]).astype(int)
 
             yield x,y
             trainGen.reset()
@@ -93,10 +96,84 @@ def getGen(XDir,yDir,batchSize,inputShape):
                 y.append( [np.load(fname).transpose()])
             y = np.concatenate(y)
 
+            # if categorical
+            y = (np.arange(y.max() + 1) == y[..., None]).astype(int)
+
             yield x,y
             valGen.reset()
 
     return generator_train(), generator_val(), trainItrPerEpoch, valItrPerEpoch
+
+
+def genVGGBasedModel(input_shape):
+
+    #https://www.kaggle.com/basu369victor/transferlearning-and-unet-to-segment-rocks-on-moon
+
+    vgg = k.applications.vgg16.VGG16(include_top=False, weights= 'imagenet',input_shape=input_shape)
+
+    for layer in vgg.layers:
+        if layer.name in ['block1_pool','block2_pool','block3_pool','block4_pool','block5_pool']:
+            layer.trainable = False
+        else:
+            layer.trainable = True
+
+    un = Conv2DTranspose(256,(3,3),strides=(2,2),padding='same')(vgg.output)
+    un = LeakyReLU(.1)(un)
+    un = BatchNormalization()(un)
+
+    concat_1 = concatenate([un, vgg.get_layer("block5_conv3").output])
+
+    un = Conv2D(512,(3,3),strides=(1,1),padding='same')(concat_1)
+    un = LeakyReLU(.1)(un)
+    un = BatchNormalization()(un)
+
+    un = Conv2DTranspose(512, (3, 3), strides=(2, 2),padding='same')(un)
+    un = LeakyReLU(.1)(un)
+    un = BatchNormalization()(un)
+
+    concat_2 = concatenate([un, vgg.get_layer("block4_conv3").output])
+
+    un = Conv2D(512, (3, 3), strides=(1, 1), padding='same')(concat_2)
+    un = LeakyReLU(0.1)(un)
+    un = BatchNormalization()(un)
+
+    un = Conv2DTranspose(512, (3, 3), strides=(2, 2),padding='same')(un)
+    un = LeakyReLU(0.1)(un)
+    un = BatchNormalization()(un)
+
+    concat_3 = concatenate([un, vgg.get_layer("block3_conv3").output])
+
+    un = Conv2D(256, (3, 3), strides=(1, 1), padding='same')(concat_3)
+    un = LeakyReLU(0.1)(un)
+    un = BatchNormalization()(un)
+
+    un = Conv2DTranspose(256, (3, 3), strides=(2, 2), padding='same')(un)
+    un = LeakyReLU(0.1)(un)
+    un = BatchNormalization()(un)
+
+    concat_4 = concatenate([un, vgg.get_layer("block2_conv2").output])
+
+    un = Conv2D(128, (3, 3), strides=(1, 1), padding='same')(concat_4)
+    un = LeakyReLU(0.1)(un)
+    un = BatchNormalization()(un)
+
+    un = Conv2DTranspose(128, (3, 3), strides=(2, 2), padding='same')(un)
+    un = LeakyReLU(0.1)(un)
+    un = BatchNormalization()(un)
+
+    concat_5 = concatenate([un, vgg.get_layer("block1_conv2").output])
+
+    un = Conv2D(64, (3, 3), strides=(1, 1), padding='same')(concat_5)
+    un = LeakyReLU(0.1)(un)
+    un = BatchNormalization()(un)
+
+
+    un = Conv2D(10, (3, 3), strides=(1, 1), padding='same',activation='sigmoid')(un)
+    # un = BatchNormalization()(un)
+
+    un = Model(inputs= vgg.input, outputs= un)
+
+    return un
 
 
 
@@ -152,11 +229,11 @@ def gen_model(input_shape, num_classes):
     conv10 = Conv2D(1, 1, activation='sigmoid')(conv9)
 
     # Cost Map extension
-    conv11 = Conv2D(num_classes, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv10)
-    conv11 = Conv2D(num_classes, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv11)
-    conv11 = Conv2D(1, 3, activation='sigmoid', padding='same', kernel_initializer='he_normal')(conv11)
+    # conv11 = Conv2D(num_classes, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv10)
+    # conv11 = Conv2D(num_classes, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv11)
+    # conv11 = Conv2D(1, 3, activation='sigmoid', padding='same', kernel_initializer='he_normal')(conv11)
 
-    model = k.Model(inputs=img_input,outputs=conv11)
+    model = k.Model(inputs=img_input,outputs=conv10)
     return model
 
 
@@ -166,11 +243,16 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
     input_shape, num_classes = model_params
 
     ########### Generating and Training Model #########
-    model = gen_model(input_shape, num_classes)
+    #model = gen_model(input_shape, num_classes)
+    model = genVGGBasedModel(input_shape)
 
-    model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy',"mean_squared_error"])
+    #model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy',"mean_squared_error"])
+    model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     print(model.summary())
-    k.utils.plot_model(model, 'm', show_shapes=True)
+    k.utils.plot_model(model, 'mvgg.png', show_shapes=True)
+
+    es= k.callbacks.EarlyStopping(monitor='val_loss',restore_best_weights=True,patience=7)
+    cbs = [es]
 
     history = model.fit(generator_train,
                         epochs=num_epochs,
@@ -178,6 +260,7 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
                         steps_per_epoch=trainItrPerEpoch,
                         validation_steps=valItrPerEpoch,
                         validation_data=generator_val)
+                        #callbacks=cbs)
 
     return history, model
 
@@ -187,7 +270,7 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
 if __name__ == '__main__':
 
     num_epochs = 100
-    batch_size = 2
+    batch_size = 8
     optimizer = Adam(lr=1e-4)
 
     Weighting = {
@@ -198,11 +281,11 @@ if __name__ == '__main__':
     }
 
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
-    XTrainDir = 'X_Train'
-    YTrainDir = 'Y_TrainNormBlur'
+    XTrainDir = 'X_Train_256'
+    YTrainDir = 'Y_Train_OG_256'
 
 
-    input_shape = (512, 512, 3)
+    input_shape = (256, 256, 3)
     num_classes = len(Weighting)
 
     generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = getGen(XTrainDir,YTrainDir,batch_size,input_shape)
@@ -212,5 +295,5 @@ if __name__ == '__main__':
 
     history, model = run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch)
 
-    model.save(pwd + '/model.h5')
+    model.save(os.path.join(pwd,'models','m3'))
     dump(history.history, open(pwd + '/history.pkl', 'wb'))

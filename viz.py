@@ -10,14 +10,27 @@ import warnings
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
+import keras as k
+
+import tensorflow as tf
+physical_devices = tf.config.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
 
 
 class imageHelper():
     # the final purpose of this class will probably be to create image generators for training and visualisations
 
-    def __init__(self, Weighting, GenerateStartStop=False,div = 8):
+    def __init__(self, Weighting, GenerateStartStop=False,size2 = 512,crop2x = 2944, crop2y = 2944 ):
         self.pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
-        self.div = div
+        self.crop2x = crop2x
+        self.crop2y = crop2y
+
+        if crop2x != crop2y:
+            w = RuntimeWarning('size 2 only enforced on X')
+            warnings.warn(w)
+
+        self.div = self.crop2x/size2
 
         floodPath = os.path.join(self.pwd,'Labeled','Flooded')
         NonfloodPath = os.path.join(self.pwd,'Labeled','Non-Flooded')
@@ -46,6 +59,8 @@ class imageHelper():
         self.df['sy'] = ssdf['sy']
         self.df['ex'] = ssdf['ex']
         self.df['ey'] = ssdf['ey']
+
+        self.model = None
 
     def defineEndPoints(self,i,mask,div,img):
 
@@ -248,7 +263,7 @@ class imageHelper():
 
         cv.waitKey(0)
 
-    def getImageMaskPair(self,img:str,EnforcedX = 2944,EnforcedY = 2944,crop = 'center') -> (np.array, np.array):
+    def getImageMaskPair(self, img:str, crop ='center') -> (np.array, np.array):
         irow = self.df.loc[self.df.img == img]
         img = cv.imread(irow.imgLoc.values[0])
         mask = cv.imread(irow['maskLoc'].values[0],cv.IMREAD_GRAYSCALE)
@@ -256,27 +271,27 @@ class imageHelper():
 
         assert crop == 'center' or crop == 'left' or crop == 'right'
         if crop == 'left':
-            img = img[0:EnforcedY,0:EnforcedX]
-            mask = mask[0:EnforcedY,0:EnforcedX]
+            img = img[0:self.crop2y, 0:self.crop2x]
+            mask = mask[0:self.crop2y, 0:self.crop2x]
         if crop == 'center':
             cx = mask.shape[1]//2
             cy = mask.shape[0]//2
 
-            img = img[cy-math.floor(EnforcedY/2):cy+math.ceil(EnforcedY/2),
-                      cx-math.floor(EnforcedX/2):cx+math.ceil(EnforcedX/2)]
-            mask = mask[cy - math.floor(EnforcedY / 2):cy + math.ceil(EnforcedY / 2),
-                  cx - math.floor(EnforcedX / 2):cx + math.ceil(EnforcedX / 2)]
+            img = img[cy-math.floor(self.crop2y / 2):cy + math.ceil(self.crop2y / 2),
+                      cx-math.floor(self.crop2x / 2):cx + math.ceil(self.crop2x / 2)]
+            mask = mask[cy - math.floor(self.crop2y / 2):cy + math.ceil(self.crop2y / 2),
+                  cx - math.floor(self.crop2x / 2):cx + math.ceil(self.crop2x / 2)]
         if crop == 'right':
-            img = img[mask.shape[0] - 1 - EnforcedY:mask.shape[0] - 1,
-                  mask.shape[1] - 1 - EnforcedX:mask.shape[1] - 1]
-            mask = mask[mask.shape[0] - 1 - EnforcedY:mask.shape[0] - 1,
-                  mask.shape[1] - 1 - EnforcedX:mask.shape[1] - 1]
+            img = img[mask.shape[0] - 1 - self.crop2y:mask.shape[0] - 1,
+                  mask.shape[1] - 1 - self.crop2x:mask.shape[1] - 1]
+            mask = mask[mask.shape[0] - 1 - self.crop2y:mask.shape[0] - 1,
+                   mask.shape[1] - 1 - self.crop2x:mask.shape[1] - 1]
 
-        assert img.shape[1] == EnforcedX and img.shape[0] == EnforcedY and \
-               mask.shape[1] == EnforcedX and mask.shape[0] == EnforcedY
+        assert img.shape[1] == self.crop2x and img.shape[0] == self.crop2y and \
+               mask.shape[1] == self.crop2x and mask.shape[0] == self.crop2y
 
         # resize for reasonable plot
-        return cv.resize(img,(int(EnforcedX//self.div),int(EnforcedY//self.div))), cv.resize(mask,(int(EnforcedX//self.div),int(EnforcedY//self.div)))
+        return cv.resize(img, (int(self.crop2x // self.div), int(self.crop2y // self.div))), cv.resize(mask, (int(self.crop2x // self.div), int(self.crop2y // self.div)))
 
     def getValidBorderingIdx(self, col, row, mask, costMap):
 
@@ -495,17 +510,56 @@ class imageHelper():
         imgPart = img.split('.')[0]
         ext = img.split('.')[1]
 
+        #x, y = self.getImageMaskPair(img,crop='left')
         x, y = self.getTrainEx(img, normalize=normalize, blurKsize=blurKsize, crop='left')
         cv.imwrite(os.path.join(X_trainDir,imgPart+'l.'+ext),x)
         np.save(os.path.join(Y_trainDir,img.split('.')[0]+'l'),y)
 
-        x, y = self.getTrainEx(img, normalize=normalize, blurKsize=blurKsize, crop='center')
+        #x, y = self.getImageMaskPair(img)
+        self.getTrainEx(img, normalize=normalize, blurKsize=blurKsize, crop='center')
         cv.imwrite(os.path.join(X_trainDir, imgPart + 'c.' + ext), x)
         np.save(os.path.join(Y_trainDir, img.split('.')[0] + 'c'), y)
 
+        #x, y = self.getImageMaskPair(img,crop='right')
         x, y = self.getTrainEx(img, normalize=normalize, blurKsize=blurKsize, crop='right')
         cv.imwrite(os.path.join(X_trainDir, imgPart + 'r.' + ext), x)
         np.save(os.path.join(Y_trainDir, img.split('.')[0] + 'r'), y)
+
+    def predictClass(self,img):
+        x, y = self.getImageMaskPair(img)
+        ypred = np.squeeze(self.model.predict(np.expand_dims(x, axis=0)))
+        ypred = np.argmax(ypred,axis=2)
+
+        yc = self.getColorForSegMap(y)
+        ypredc = self.getColorForSegMap(ypred)
+
+
+        cv.imshow('x', x)
+        cv.imshow('y', yc)
+        cv.imshow('ypred', ypredc)
+        cv.waitKey(0)
+        cv.destroyAllWindows()
+
+
+    def predict(self,img):
+        x, y = self.getTrainEx(img)
+        ypred = np.squeeze(self.model.predict (np.expand_dims(x,axis=0)))
+
+        hmy = y / y.max() * 255
+        hmy = cv.applyColorMap(hmy.astype('uint8'), cv.COLORMAP_HOT)
+
+        hmypred = ypred / ypred.max() * 255
+        hmypred = cv.applyColorMap(hmypred.astype('uint8'), cv.COLORMAP_HOT)
+
+        cv.imshow('x',x)
+        cv.imshow('y',hmy)
+        cv.imshow('ypred',hmypred)
+        cv.waitKey(0)
+        cv.destroyAllWindows()
+
+
+
+
 
 
 
@@ -523,12 +577,20 @@ if __name__ == '__main__':
         'Road-non-flooded': 1
     }
 
-    ih = imageHelper(Weighting,GenerateStartStop=False,div=5.75)
+    ih = imageHelper(Weighting,GenerateStartStop=False,size2=256)
     ih.saveTrainingExamples(regen=False)
 
     #print(ih.df)
     # x, y = ih.getTrainEx('8482.jpg', normalize=True,blurKsize=5)
     # ih.getWaveFrontCostForMask('8482.jpg', x, y)
 
-    x,y = ih.getTrainEx('6615.jpg',normalize=False,blurKsize=5)
-    ih.getWaveFrontCostForMask('6615.jpg',x,y,plottingUpSample=1)
+    # x,y = ih.getTrainEx('6615.jpg',normalize=False,blurKsize=5)
+    # ih.getWaveFrontCostForMask('6615.jpg',x,y,plottingUpSample=1)
+
+    ih.model = k.models.load_model(os.path.join('models','m2'))
+    print(ih.model.summary())
+
+
+    for img in ih.df.img.values:
+        ih.predictClass(img)
+
