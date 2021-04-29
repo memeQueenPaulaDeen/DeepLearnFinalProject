@@ -551,7 +551,7 @@ class imageHelper():
         hmypred = ypred / ypred.max() * 255
         hmypred = cv.applyColorMap(hmypred.astype('uint8'), cv.COLORMAP_HOT)
 
-        cv.imshow('x',x)
+         cv.imshow('x',x)
         cv.imshow('y',hmy)
         cv.imshow('ypred',hmypred)
         cv.waitKey(0)
@@ -587,10 +587,10 @@ if __name__ == '__main__':
     # x,y = ih.getTrainEx('6615.jpg',normalize=False,blurKsize=5)
     # ih.getWaveFrontCostForMask('6615.jpg',x,y,plottingUpSample=1)
 
-    ih.model = k.models.load_model(os.path.join('models','m2'))
+    ih.model = k.models.load_model(os.path.join('models','m5'))
     print(ih.model.summary())
 
 
     for img in ih.df.img.values:
-        ih.predictClass(img)
+        ih.predict(img)
 

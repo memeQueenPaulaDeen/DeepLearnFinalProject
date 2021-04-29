@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 
 import numpy as np
@@ -15,6 +16,7 @@ from keras.utils import to_categorical, plot_model
 from keras.regularizers import l2
 from keras.callbacks import LearningRateScheduler
 from keras.preprocessing.image import ImageDataGenerator
+import cv2 as cv
 
 import tensorflow as tf
 import numpy as np
@@ -22,6 +24,116 @@ from pickle import load, dump
 
 physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
+def shift(x,y,ratio= 0.0):
+    #https://towardsdatascience.com/complete-image-augmentation-in-opencv-31a6b02694f5
+    assert ratio < 1 and ratio > 0, 'Value should be less than 1 and greater than 0'
+
+    ratioh = random.uniform(-ratio, ratio)
+    ratiov = random.uniform(-ratio, ratio)
+
+    h, w = x.shape[:2]
+
+    moveh = w * ratioh
+    movev = w * ratiov
+
+    if ratioh > 0:
+        x = x[:, :int(w - moveh), :]
+    if ratioh < 0:
+        x = x[:, int(-1 * moveh):, :]
+
+    if ratiov > 0:
+        x = x[:int(h - movev), :, :]
+    if ratiov < 0:
+        x = x[int(-1 * movev):, :, :]
+
+    if len(y.shape) == 2:
+        y  = np.expand_dims(y,axis=2)
+
+    if ratioh > 0:
+        y = y[:, :int(w - moveh), :]
+    if ratioh < 0:
+        y = y[:, int(-1 * moveh):, :]
+
+    if ratiov > 0:
+        y = y[:int(h - movev), :, :]
+    if ratiov < 0:
+        y = y[int(-1 * movev):, :, :]
+
+
+
+    x = fill(x, h, w)
+    y = fill(y, h, w)
+
+    return x, np.squeeze(y)
+
+def rotate(x,y,angle):
+
+    if len(y.shape) == 2:
+        y  = np.expand_dims(y,axis=2)
+
+    angle = int(random.uniform(-angle, angle))
+    h, w = x.shape[:2]
+
+    A = cv.getRotationMatrix2D((int(w / 2), int(h / 2)), angle, 1)
+    x = cv.warpAffine(x, A, (w, h))
+    y = cv.warpAffine(y, A, (w, h))
+
+    return x, np.squeeze(y)
+
+def flip(x,y):
+    hf = random.randint(0,1)
+    vf = random.randint(0,1)
+
+    if len(y.shape) == 2:
+        y  = np.expand_dims(y,axis=2)
+
+    if hf == 1:
+        x = cv.flip(x,1)
+        y = cv.flip(y,1)
+
+    if vf == 1:
+        x = cv.flip(x,0)
+        y = cv.flip(y,0)
+
+    return x, np.squeeze(y)
+
+def zoom(x, y, range):
+    #https://towardsdatascience.com/complete-image-augmentation-in-opencv-31a6b02694f5
+    assert range < 1 and range > 0, 'Value should be less than 1 and greater than 0'
+    range = random.uniform(range, 1)
+
+    if len(y.shape) == 2:
+        y  = np.expand_dims(y,axis=2)
+
+
+    h, w = x.shape[:2]
+    h_taken = int(range * h)
+    w_taken = int(range * w)
+    h_start = random.randint(0, h-h_taken)
+    w_start = random.randint(0, w-w_taken)
+    x = x[h_start:h_start+h_taken, w_start:w_start+w_taken, :]
+    y = y[h_start:h_start+h_taken, w_start:w_start+w_taken, :]
+    x = fill(x, h, w)
+    y = fill(y, h, w)
+
+    return x, np.squeeze(y)
+
+def fill(img, h, w):
+    #https://towardsdatascience.com/complete-image-augmentation-in-opencv-31a6b02694f5
+    img = cv.resize(img, (h, w), cv.INTER_CUBIC)
+    return img
+
+def noise(x,y,cut):
+    c = int(255*cut)
+    n1 = np.random.randint(0, 255, (256, 256, 3))
+    n2 = np.random.randint(0, 255, (256, 256, 3))
+
+    n1[n1> c] = 0
+    n2[n2 < 255-c] = 0
+    x = x + (n1+n2)
+    x[x> 255] = 255
+    return x, y
 
 
 
@@ -46,7 +158,7 @@ def getGen(XDir,yDir,batchSize,inputShape):
     valItrPerEpoch = int(len(valSet.classes) / valSet.batch_size)
 
     def generator_train():
-        tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2)#,channel_shift_range=.4)
+        tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2,channel_shift_range=.2,brightness_range=(.8,1))
 
         trainGen = tg1.flow_from_directory(XDir,
                                           target_size=inputShape[0:-1],
@@ -66,6 +178,20 @@ def getGen(XDir,yDir,batchSize,inputShape):
             for fname in fnames:
                 y.append( [np.load(fname).transpose()])
             y = np.concatenate(y)
+
+            for i in range(len(x)):
+                xi = x[i]
+                yi = y[i]
+
+                xi, yi = flip(xi, yi,)
+                xi, yi = zoom(xi, yi,.05)
+                xi, yi = shift(xi,yi,.2)
+                xi, yi = rotate(xi,yi,5)
+                xi, yi = noise(xi,yi,.05)
+
+                x[i] = xi
+                y[i] = yi
+
 
             #if categorical
             y = (np.arange(y.max()+1) == y[...,None]).astype(int)
@@ -111,13 +237,16 @@ def genVGGBasedModel(input_shape):
 
     vgg = k.applications.vgg16.VGG16(include_top=False, weights= 'imagenet',input_shape=input_shape)
 
-    for layer in vgg.layers:
-        if layer.name in ['block1_pool','block2_pool','block3_pool','block4_pool','block5_pool']:
-            layer.trainable = False
-        else:
-            layer.trainable = True
+    # for layer in vgg.layers:
+    #     if layer.name in ['block1_pool','block2_pool','block3_pool','block4_pool','block5_pool']:
+    #         layer.trainable = False
+    #     else:
+    #         layer.trainable = True
 
-    un = Conv2DTranspose(256,(3,3),strides=(2,2),padding='same')(vgg.output)
+    for layer in vgg.layers:
+        layer.trainable = False
+
+    un = Conv2DTranspose(256,(9,9),strides=(2,2),padding='same')(vgg.output)
     un = LeakyReLU(.1)(un)
     un = BatchNormalization()(un)
 
@@ -168,7 +297,7 @@ def genVGGBasedModel(input_shape):
     un = BatchNormalization()(un)
 
 
-    un = Conv2D(10, (3, 3), strides=(1, 1), padding='same',activation='sigmoid')(un)
+    un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation='sigmoid')(un)
     # un = BatchNormalization()(un)
 
     un = Model(inputs= vgg.input, outputs= un)
@@ -246,8 +375,8 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
     #model = gen_model(input_shape, num_classes)
     model = genVGGBasedModel(input_shape)
 
-    #model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy',"mean_squared_error"])
-    model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy',"mean_squared_error"])
+    #model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     print(model.summary())
     k.utils.plot_model(model, 'mvgg.png', show_shapes=True)
 
@@ -259,8 +388,24 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
                         batch_size=batch_size,
                         steps_per_epoch=trainItrPerEpoch,
                         validation_steps=valItrPerEpoch,
-                        validation_data=generator_val)
-                        #callbacks=cbs)
+                        validation_data=generator_val,
+                        callbacks=cbs)
+
+    for layer in model.layers:
+        if layer.name in ['block1_pool','block2_pool','block3_pool','block4_pool','block5_pool']:
+            layer.trainable = False
+        else:
+            layer.trainable = True
+
+    # model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+    # print('fine tune')
+    # history = model.fit(generator_train,
+    #                     epochs=num_epochs,
+    #                     batch_size=batch_size,
+    #                     steps_per_epoch=trainItrPerEpoch,
+    #                     validation_steps=valItrPerEpoch,
+    #                     validation_data=generator_val,
+    #                     callbacks=cbs)
 
     return history, model
 
@@ -270,7 +415,7 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
 if __name__ == '__main__':
 
     num_epochs = 100
-    batch_size = 8
+    batch_size = 4
     optimizer = Adam(lr=1e-4)
 
     Weighting = {
@@ -282,7 +427,7 @@ if __name__ == '__main__':
 
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
     XTrainDir = 'X_Train_256'
-    YTrainDir = 'Y_Train_OG_256'
+    YTrainDir = 'Y_TrainNorm_256'
 
 
     input_shape = (256, 256, 3)
@@ -295,5 +440,5 @@ if __name__ == '__main__':
 
     history, model = run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch)
 
-    model.save(os.path.join(pwd,'models','m3'))
+    model.save(os.path.join(pwd,'models','m5'))
     dump(history.history, open(pwd + '/history.pkl', 'wb'))
