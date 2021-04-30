@@ -440,5 +440,5 @@ if __name__ == '__main__':
 
     history, model = run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch)
 
-    model.save(os.path.join(pwd,'models','m5'))
+    model.save(os.path.join(pwd,'models','m6'))
     dump(history.history, open(pwd + '/history.pkl', 'wb'))

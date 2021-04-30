@@ -337,7 +337,7 @@ class imageHelper():
 
         return currentCost + stepCost
 
-    def getWaveFrontCostForMask(self, img,x, y,plottingUpSample=2):
+    def getWaveFrontCostForMask(self, img,x, y,plottingUpSample=2,calc_downSample = 2):
 
         xidx, yidx = 1, 0
 
@@ -348,12 +348,13 @@ class imageHelper():
                                    1,
                                    img)
 
-        sx, sy, ex, ey = row['sx']//plottingUpSample, row['sy']//plottingUpSample, row['ex']//plottingUpSample, row['ey']//plottingUpSample
+        scaleFactor = plottingUpSample * calc_downSample
+        sx, sy, ex, ey = row['sx'] // scaleFactor, row['sy'] // scaleFactor, row['ex'] // scaleFactor, row['ey'] // scaleFactor
 
 
         waveFront = set()
         initVal = 9999999999999
-        costMap = np.ones((y.shape[yidx], y.shape[xidx])) * initVal
+        costMap = np.ones((y.shape[yidx]//calc_downSample, y.shape[xidx]//calc_downSample)) * initVal
 
         costMap[ey,ex] = 0
         waveFront.add((ex,ey,0))
@@ -361,7 +362,7 @@ class imageHelper():
         count = 0
         while len(waveFront) > 0:
             col, row, currentCost = waveFront.pop()
-            for trip in self.getValidBorderingIdx(col, row, cv.resize(y, (y.shape[xidx], y.shape[yidx])), costMap):#,interpolation=cv.INTER_NEAREST),costMap):
+            for trip in self.getValidBorderingIdx(col, row, cv.resize(y, (y.shape[xidx]//calc_downSample, y.shape[yidx]//calc_downSample)), costMap):#,interpolation=cv.INTER_NEAREST),costMap):
                 waveFront.add(trip)
                 # update cost map
                 c, r, d = trip
@@ -375,7 +376,7 @@ class imageHelper():
                 hm[hm==initVal] = hm[hm!=initVal].max()
                 hm = hm/hm.max()*255
                 hm = cv.applyColorMap(hm.astype('uint8'), cv.COLORMAP_HOT)
-                cv.imshow('heatMap for ' + img,cv.resize(hm,(hm.shape[xidx]*plottingUpSample,hm.shape[yidx]*plottingUpSample)))
+                cv.imshow('heatMap for ' + img,cv.resize(hm,(hm.shape[xidx]*scaleFactor,hm.shape[yidx]*scaleFactor)))
                 cv.waitKey(1)
                 #cv.destroyAllWindows()
                 print(count)
@@ -385,7 +386,7 @@ class imageHelper():
         cv.waitKey(0)
         cv.destroyAllWindows()
 
-        both = np.concatenate((x,hm),axis=1)
+        both = np.concatenate((cv.resize(x,(x.shape[xidx]//calc_downSample,x.shape[yidx]//calc_downSample)),hm),axis=1)
         pathColor = (247,5,239)#pink
 
         pos = (sx,sy)
@@ -394,25 +395,27 @@ class imageHelper():
             xpos = pos[0]
             ypos = pos[1]
             both[ypos,xpos] = pathColor
-            both[ypos,xpos+x.shape[xidx]] = pathColor
+            both[ypos,xpos+x.shape[xidx]//calc_downSample] = pathColor
             pos = self.gradDesc(xpos,ypos,costMap)
 
             name = 'original image left, distance to goal on right for ' + img
 
             font = cv.FONT_HERSHEY_SIMPLEX
             cv.putText(both, "s", (sx, sy), font,
-                       1, (55, 255, 55), 2)
-            cv.putText(both, "s", (sx + x.shape[xidx], sy), font,
-                       1, (55, 255, 55), 2)
+                       1/calc_downSample, (55, 255, 55), 1)
+            cv.putText(both, "s", (sx + x.shape[xidx]//calc_downSample, sy), font,
+                       1/calc_downSample, (55, 255, 55), 1)
 
             cv.putText(both, "E", (ex, ey), font,
-                       1, (55, 255, 55), 2)
-            cv.putText(both, "E", (ex + x.shape[xidx], ey), font,
-                       1, (55, 255, 55), 2)
+                       1/calc_downSample, (55, 255, 55), 1)
+            cv.putText(both, "E", (ex + x.shape[xidx]//calc_downSample, ey), font,
+                       1/calc_downSample, (55, 255, 55), 1)
 
-            cv.imshow(name, cv.resize(both,(both.shape[xidx]*plottingUpSample,both.shape[yidx]*plottingUpSample)))
+            cv.imshow(name, cv.resize(both,(both.shape[xidx]*scaleFactor,both.shape[yidx]*scaleFactor)))
 
             cv.waitKey(1)
+
+        self.predict(img,plot=True,destroy=False)
 
         cv.waitKey(0)
         cv.destroyAllWindows()
@@ -541,21 +544,25 @@ class imageHelper():
         cv.destroyAllWindows()
 
 
-    def predict(self,img):
+    def predict(self,img,plot = False,destroy = True):
         x, y = self.getTrainEx(img)
         ypred = np.squeeze(self.model.predict (np.expand_dims(x,axis=0)))
 
-        hmy = y / y.max() * 255
-        hmy = cv.applyColorMap(hmy.astype('uint8'), cv.COLORMAP_HOT)
+        if plot:
+            hmy = y / y.max() * 255
+            hmy = cv.applyColorMap(hmy.astype('uint8'), cv.COLORMAP_HOT)
 
-        hmypred = ypred / ypred.max() * 255
-        hmypred = cv.applyColorMap(hmypred.astype('uint8'), cv.COLORMAP_HOT)
+            hmypred = ypred / ypred.max() * 255
+            hmypred = cv.applyColorMap(hmypred.astype('uint8'), cv.COLORMAP_HOT)
 
-         cv.imshow('x',x)
-        cv.imshow('y',hmy)
-        cv.imshow('ypred',hmypred)
-        cv.waitKey(0)
-        cv.destroyAllWindows()
+            cv.imshow('x',x)
+            cv.imshow('y',hmy)
+            cv.imshow('ypred',hmypred)
+            cv.waitKey(0)
+            if destroy:
+                cv.destroyAllWindows()
+
+        return x, ypred
 
 
 
@@ -590,7 +597,14 @@ if __name__ == '__main__':
     ih.model = k.models.load_model(os.path.join('models','m5'))
     print(ih.model.summary())
 
+    # x, ypred = ih.predict('6750.jpg')
+    # ih.getWaveFrontCostForMask('6750.jpg', x, ypred, plottingUpSample=2)
+
+
+    # for img in ih.df.img.values:
+    #     ih.predict(img,plot=True)
 
     for img in ih.df.img.values:
-        ih.predict(img)
+        x, ypred = ih.predict(img)
+        ih.getWaveFrontCostForMask(img, x, ypred, plottingUpSample=2)
 
