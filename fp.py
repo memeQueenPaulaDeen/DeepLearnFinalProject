@@ -454,10 +454,10 @@ def genVGGBasedModel(input_shape):
 
 
 
-    #un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation=k.activations.softplus)(un)
+    un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation=rampMax)(un)
 
     ##ramp max activation
-    un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation=rampMax)(un)
+    #un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation=rampMax)(un)
     # un = BatchNormalization()(un)
 
     un = Model(inputs= vgg.input, outputs= un)
@@ -552,15 +552,15 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
 
     generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = us.getGen(batch_size)
 
-    history = model.fit(generator_train,
-                        epochs=20,
-                        batch_size=batch_size,
-                        steps_per_epoch=trainItrPerEpoch,
-                        validation_steps=valItrPerEpoch,
-                        validation_data=generator_val)
-                        #callbacks=cbs)
+    # history = model.fit(generator_train,
+    #                     epochs=10,
+    #                     batch_size=batch_size,
+    #                     steps_per_epoch=trainItrPerEpoch,
+    #                     validation_steps=valItrPerEpoch,
+    #                     validation_data=generator_val)
+    #                     #callbacks=cbs)
 
-    #model = k.models.load_model(os.path.join('models','m7'))
+    model = k.models.load_model(os.path.join('models','ssm1'))
 
 
     # for layer in model.layers:
@@ -621,5 +621,5 @@ if __name__ == '__main__':
 
     history, model = run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch)
 
-    model.save(os.path.join(pwd,'models','m9'))
+    model.save(os.path.join(pwd,'models','m10'))
     dump(history.history, open(pwd + '/history.pkl', 'wb'))

@@ -44,7 +44,7 @@ class imageHelper():
         self.segLabelsDF = pd.read_csv(os.path.join(self.pwd,'classMap.csv'))
 
         self.segLabelsDF['Nav Class Name'] = self.segLabelsDF['Class Name']
-        self.segLabelsDF.loc[~ self.segLabelsDF['Class Name'].isin(Weighting.keys()),'Nav Class Name'] = 'Obstacle'
+        self.segLabelsDF.loc[~ self.segLabelsDF['Class Name'].isin(Weighting.keys()),'Nav Class Name'] = 'Obstacle' #set all to obs
         self.segLabelsDF['nav Weight'] =  self.segLabelsDF['Nav Class Name'].apply(lambda x: Weighting[x]) # add the weighting definied as a param to this class
         self.scaleing = self.segLabelsDF['nav Weight'].max()
 
@@ -291,7 +291,7 @@ class imageHelper():
                mask.shape[1] == self.crop2x and mask.shape[0] == self.crop2y
 
         # resize for reasonable plot
-        return cv.resize(img, (int(self.crop2x // self.div), int(self.crop2y // self.div))), cv.resize(mask, (int(self.crop2x // self.div), int(self.crop2y // self.div)))
+        return cv.resize(img, (int(self.crop2x // self.div), int(self.crop2y // self.div))), cv.resize(mask, (int(self.crop2x // self.div), int(self.crop2y // self.div)),cv.INTER_NEAREST)
 
     def getValidBorderingIdx(self, col, row, mask, costMap):
 
@@ -584,7 +584,7 @@ if __name__ == '__main__':
     }
 
     ih = imageHelper(Weighting,GenerateStartStop=False,size2=256)
-    ih.saveTrainingExamples(regen=True)
+    ih.saveTrainingExamples(regen=False)
 
     #print(ih.df)
     # x, y = ih.getTrainEx('8482.jpg', normalize=True,blurKsize=5)
@@ -600,10 +600,10 @@ if __name__ == '__main__':
     # ih.getWaveFrontCostForMask('6750.jpg', x, ypred, plottingUpSample=2)
 
 
-    for img in ih.df.img.values:
-        ih.predict(img,plot=True)
-
     # for img in ih.df.img.values:
-    #     x, ypred = ih.predict(img)
-    #     ih.getWaveFrontCostForMask(img, x, ypred, plottingUpSample=2)
+    #     ih.predict(img,plot=True)
+
+    for img in ih.df.img.values[3:]:
+        x, ypred = ih.predict(img)
+        ih.getWaveFrontCostForMask(img, x, ypred, plottingUpSample=2)
 
