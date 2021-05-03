@@ -25,6 +25,162 @@ from pickle import load, dump
 physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
+
+class USHelp():
+
+    def __init__(self,imgFolderPath):
+
+        self.fpath = imgFolderPath
+
+        # for img in os.listdir(self.fpath):
+        #     self.manuelEst(img)
+
+    def getGen(self, batch_size, inputShape = (256,256,3)):
+        tg = k.preprocessing.image.ImageDataGenerator(validation_split=.2)
+
+        XDir = os.path.join(self.fpath,'..')
+        trainSet = tg.flow_from_directory(XDir,
+                                          target_size=inputShape[0:-1],
+                                          batch_size=batch_size,
+                                          color_mode="rgb",
+                                          class_mode='categorical',
+                                          subset='training',
+                                          shuffle=False)
+        valSet = tg.flow_from_directory(XDir,
+                                        target_size=inputShape[0:-1],
+                                        batch_size=batch_size,
+                                        color_mode="rgb",
+                                        class_mode='categorical',
+                                        subset='validation',
+                                        shuffle=False)
+
+        trainItrPerEpoch = int(len(trainSet.classes) / trainSet.batch_size)
+        valItrPerEpoch = int(len(valSet.classes) / valSet.batch_size)
+
+        def generator_train():
+            tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2, channel_shift_range=.3,
+                                                           brightness_range=(.7, 1))
+
+            trainGen = tg1.flow_from_directory(XDir,
+                                               target_size=inputShape[0:-1],
+                                               batch_size=batch_size,
+                                               color_mode="rgb",
+                                               class_mode='input',
+                                               subset='training', )
+            # shuffle=False)
+
+            files = trainGen.filenames
+            names = [f.split(os.sep)[1] for f in files]
+            while True:
+
+                x = trainGen.__next__()[0]
+                y = []
+                fnames = names[trainGen.batch_index * batch_size - batch_size: trainGen.batch_index * batch_size]
+
+                for xi in fnames:
+                    y.append([self.manuelEst(xi)])
+                y = np.concatenate(y)
+
+                for i in range(len(x)):
+                    xi = x[i]
+                    yi = y[i]
+
+                    xi, yi = flip(xi, yi, )
+                    xi, yi = zoom(xi, yi, .2)
+                    xi, yi = shift(xi, yi, .3)
+                    xi, yi = rotate(xi, yi, 5)
+                    xi, yi = noise(xi, yi, .05)
+
+                    x[i] = xi
+                    y[i] = yi
+
+                # if categorical
+                # y = (np.arange(y.max()+1) == y[...,None]).astype(int)
+
+                yield x, y
+                trainGen.reset()
+
+        def generator_val():
+            tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2)
+
+            valGen = tg1.flow_from_directory(XDir,
+                                             target_size=inputShape[0:-1],
+                                             batch_size=batch_size,
+                                             color_mode="rgb",
+                                             class_mode='input',
+                                             subset='validation', )
+            # shuffle=False)
+
+            files = valGen.filenames
+            names = [f.split(os.sep)[1] for f in files]
+            while True:
+
+                x = valGen.__next__()[0]
+                y = []
+                fnames = names[valGen.batch_index * batch_size - batch_size: valGen.batch_index * batch_size]
+
+                for xi in fnames:
+                    y.append([self.manuelEst(xi)])
+                y = np.concatenate(y)
+
+                # if categorical
+                # y = (np.arange(y.max() + 1) == y[..., None]).astype(int)
+
+                yield x, y
+                valGen.reset()
+
+        return generator_train(), generator_val(), trainItrPerEpoch, valItrPerEpoch
+
+    def manuelEst(self,img):
+
+
+        img = cv.imread(os.path.join(self.fpath, img))
+        img = cv.resize(img, (256, 256))
+
+        K = 5
+        attempts = 10
+        vectorized = img.reshape((-1, 3))
+        vectorized = np.float32(vectorized)
+        criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+        ret, label, center = cv.kmeans(vectorized, K, None, criteria, attempts, cv.KMEANS_PP_CENTERS)
+
+        center = np.uint8(center)
+
+        res = center[label.flatten()]
+        result_image = res.reshape((img.shape))
+
+        new_label = np.zeros((img.shape[0],img.shape[1]))
+
+        centSortedGreen = sorted(center, key=lambda tup: tup[1], reverse=True)
+        minIdx = np.min(np.where(np.ptp(centSortedGreen,axis=1) == np.ptp(centSortedGreen,axis=1).min()))
+
+        # new_label[(result_image==centSortedGreen[minIdx])[:,:,1]] = 0
+        # centSortedGreen = np.delete(centSortedGreen,minIdx)
+
+        idx = 0
+        for trip in centSortedGreen:
+            new_label[(result_image ==trip)[:,:,1]] = idx
+            idx = idx +1
+
+
+
+
+        # hmy = label.reshape((img.shape[0],img.shape[1])) / label.max() * 255
+        # hmy = cv.applyColorMap(hmy.astype('uint8'), cv.COLORMAP_HOT)
+        #
+        # hmR = new_label.reshape((img.shape[0], img.shape[1])) / label.max() * 255
+        # hmR = cv.applyColorMap(hmR.astype('uint8'), cv.COLORMAP_HOT)
+
+        # cv.imshow('origin',img)
+        # cv.imshow('seg',result_image)
+        # cv.imshow('map',hmy)
+        # cv.imshow('Rectified map',hmR)
+        # cv.waitKey(0)
+        # cv.destroyAllWindows()
+
+        return  new_label/ new_label.max()
+
+
 def shift(x,y,ratio= 0.0):
     #https://towardsdatascience.com/complete-image-augmentation-in-opencv-31a6b02694f5
     assert ratio < 1 and ratio > 0, 'Value should be less than 1 and greater than 0'
@@ -141,32 +297,32 @@ def getGen(XDir,yDir,batchSize,inputShape):
     tg = k.preprocessing.image.ImageDataGenerator(validation_split=.2)
     trainSet = tg.flow_from_directory(XDir,
                                       target_size=inputShape[0:-1],
-                                      batch_size=batch_size,
+                                      batch_size=batchSize,
                                       color_mode="rgb",
                                       class_mode='categorical',
                                       subset='training',
                                       shuffle=False)
     valSet = tg.flow_from_directory(XDir,
-                                      target_size=inputShape[0:-1],
-                                      batch_size=batch_size,
-                                      color_mode="rgb",
-                                      class_mode='categorical',
-                                      subset='validation',
-                                      shuffle=False)
+                                    target_size=inputShape[0:-1],
+                                    batch_size=batchSize,
+                                    color_mode="rgb",
+                                    class_mode='categorical',
+                                    subset='validation',
+                                    shuffle=False)
 
     trainItrPerEpoch = int(len(trainSet.classes) / trainSet.batch_size)
     valItrPerEpoch = int(len(valSet.classes) / valSet.batch_size)
 
     def generator_train():
-        tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2,channel_shift_range=.2,brightness_range=(.8,1))
+        tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2,channel_shift_range=.3,brightness_range=(.7,1))
 
         trainGen = tg1.flow_from_directory(XDir,
-                                          target_size=inputShape[0:-1],
-                                          batch_size=batch_size,
-                                          color_mode="rgb",
-                                          class_mode='input',
-                                          subset='training',
-                                          shuffle=False)
+                                           target_size=inputShape[0:-1],
+                                           batch_size=batchSize,
+                                           color_mode="rgb",
+                                           class_mode='input',
+                                           subset='training', )
+                                          # shuffle=False)
 
         files = trainGen.filenames
         ynames = [os.path.join(yDir,f.split(os.sep)[-1].split('.')[0]+'.npy') for f in files]
@@ -184,8 +340,8 @@ def getGen(XDir,yDir,batchSize,inputShape):
                 yi = y[i]
 
                 xi, yi = flip(xi, yi,)
-                xi, yi = zoom(xi, yi,.05)
-                xi, yi = shift(xi,yi,.2)
+                xi, yi = zoom(xi, yi,.2)
+                xi, yi = shift(xi,yi,.3)
                 xi, yi = rotate(xi,yi,5)
                 xi, yi = noise(xi,yi,.05)
 
@@ -194,7 +350,7 @@ def getGen(XDir,yDir,batchSize,inputShape):
 
 
             #if categorical
-            y = (np.arange(y.max()+1) == y[...,None]).astype(int)
+            #y = (np.arange(y.max()+1) == y[...,None]).astype(int)
 
             yield x,y
             trainGen.reset()
@@ -204,12 +360,12 @@ def getGen(XDir,yDir,batchSize,inputShape):
         tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2)
 
         valGen = tg1.flow_from_directory(XDir,
-                                          target_size=inputShape[0:-1],
-                                          batch_size=batch_size,
-                                          color_mode="rgb",
-                                          class_mode='input',
-                                          subset='validation',
-                                          shuffle=False)
+                                         target_size=inputShape[0:-1],
+                                         batch_size=batchSize,
+                                         color_mode="rgb",
+                                         class_mode='input',
+                                         subset='validation', )
+                                          #shuffle=False)
 
         files = valGen.filenames
         ynames = [os.path.join(yDir,f.split(os.sep)[-1].split('.')[0]+'.npy') for f in files]
@@ -223,7 +379,7 @@ def getGen(XDir,yDir,batchSize,inputShape):
             y = np.concatenate(y)
 
             # if categorical
-            y = (np.arange(y.max() + 1) == y[..., None]).astype(int)
+            #y = (np.arange(y.max() + 1) == y[..., None]).astype(int)
 
             yield x,y
             valGen.reset()
@@ -297,7 +453,11 @@ def genVGGBasedModel(input_shape):
     un = BatchNormalization()(un)
 
 
-    un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation='sigmoid')(un)
+
+    #un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation=k.activations.softplus)(un)
+
+    ##ramp max activation
+    un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation=rampMax)(un)
     # un = BatchNormalization()(un)
 
     un = Model(inputs= vgg.input, outputs= un)
@@ -365,6 +525,8 @@ def gen_model(input_shape, num_classes):
     model = k.Model(inputs=img_input,outputs=conv10)
     return model
 
+def rampMax(x):
+    return k.backend.relu(x,max_value=1)
 
 def run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch):
     ########## Program Variables ##########
@@ -383,6 +545,41 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
     es= k.callbacks.EarlyStopping(monitor='val_loss',restore_best_weights=True,patience=7)
     cbs = [es]
 
+    # XTrainDir = os.path.join('DD','X_Train')
+    # YTrainDir = os.path.join('DD','Y_Train')
+
+    us = USHelp(os.path.join('Unlabeled','image'))
+
+    generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = us.getGen(batch_size)
+
+    history = model.fit(generator_train,
+                        epochs=20,
+                        batch_size=batch_size,
+                        steps_per_epoch=trainItrPerEpoch,
+                        validation_steps=valItrPerEpoch,
+                        validation_data=generator_val)
+                        #callbacks=cbs)
+
+    #model = k.models.load_model(os.path.join('models','m7'))
+
+
+    # for layer in model.layers:
+    #     if layer.name in ['block1_pool','block2_pool','block3_pool','block4_pool','block5_pool']:
+    #         layer.trainable = False
+    #     # elif layer.name in ['conv2d_transpose','conv2d','batch_normalization','conv2d_transpose_1','conv2d_1','batch_normalization_1','conv2d_transpose_2','conv2d_2','batch_normalization_2']:
+    #     #     layer.trainable = False
+    #     else:
+    #         layer.trainable = True
+
+    XTrainDir = 'X_Train_256'
+    YTrainDir = 'Y_TrainNormBlur_256'
+
+    generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = getGen(XTrainDir, YTrainDir, batch_size,input_shape)
+    #
+    # #model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy',"mean_squared_error"])
+
+    print('fine tune')
     history = model.fit(generator_train,
                         epochs=num_epochs,
                         batch_size=batch_size,
@@ -390,22 +587,6 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
                         validation_steps=valItrPerEpoch,
                         validation_data=generator_val,
                         callbacks=cbs)
-
-    for layer in model.layers:
-        if layer.name in ['block1_pool','block2_pool','block3_pool','block4_pool','block5_pool']:
-            layer.trainable = False
-        else:
-            layer.trainable = True
-
-    # model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-    # print('fine tune')
-    # history = model.fit(generator_train,
-    #                     epochs=num_epochs,
-    #                     batch_size=batch_size,
-    #                     steps_per_epoch=trainItrPerEpoch,
-    #                     validation_steps=valItrPerEpoch,
-    #                     validation_data=generator_val,
-    #                     callbacks=cbs)
 
     return history, model
 
@@ -415,11 +596,11 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
 if __name__ == '__main__':
 
     num_epochs = 100
-    batch_size = 4
+    batchSize = 4
     optimizer = Adam(lr=1e-4)
 
     Weighting = {
-        'Obstacle': 5000,
+        'Obstacle': 600,
         'Tree': 300,
         'Grass': 50,
         'Road-non-flooded': 1
@@ -427,18 +608,18 @@ if __name__ == '__main__':
 
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
     XTrainDir = 'X_Train_256'
-    YTrainDir = 'Y_TrainNorm_256'
+    YTrainDir = 'Y_TrainNormBlur_256'
 
 
     input_shape = (256, 256, 3)
     num_classes = len(Weighting)
 
-    generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = getGen(XTrainDir,YTrainDir,batch_size,input_shape)
+    generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = getGen(XTrainDir, YTrainDir, batchSize, input_shape)
 
-    run_params = (num_epochs, batch_size, optimizer)
+    run_params = (num_epochs, batchSize, optimizer)
     model_params = (input_shape, num_classes)
 
     history, model = run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch)
 
-    model.save(os.path.join(pwd,'models','m6'))
+    model.save(os.path.join(pwd,'models','m9'))
     dump(history.history, open(pwd + '/history.pkl', 'wb'))

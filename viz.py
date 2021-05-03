@@ -481,11 +481,11 @@ class imageHelper():
 
     def saveTrainingExamples(self,regen=False):
 
-        X_trainDir = os.path.join(self.pwd, 'X_Train/data')
-        Y_trainDir = os.path.join(self.pwd,'Y_Train')
-        Y_trainNormDir = os.path.join(self.pwd,'Y_TrainNorm')
-        Y_trainBlurDir = os.path.join(self.pwd,'Y_TrainBlur')
-        Y_trainNormBlurDir = os.path.join(self.pwd,'Y_TrainNormBlur')
+        X_trainDir = os.path.join(self.pwd, 'X_Train_256/data')
+        Y_trainDir = os.path.join(self.pwd,'Y_Train_256')
+        Y_trainNormDir = os.path.join(self.pwd,'Y_TrainNorm_256')
+        Y_trainBlurDir = os.path.join(self.pwd,'Y_TrainBlur_256')
+        Y_trainNormBlurDir = os.path.join(self.pwd,'Y_TrainNormBlur_256')
 
         dirs = [X_trainDir,Y_trainDir,Y_trainNormDir,Y_trainBlurDir,Y_trainNormBlurDir]
 
@@ -545,7 +545,7 @@ class imageHelper():
 
 
     def predict(self,img,plot = False,destroy = True):
-        x, y = self.getTrainEx(img)
+        x, y = self.getTrainEx(img,blurKsize=11)
         ypred = np.squeeze(self.model.predict (np.expand_dims(x,axis=0)))
 
         if plot:
@@ -569,7 +569,6 @@ class imageHelper():
 
 
 
-
 if __name__ == '__main__':
 
     #todo eventually will need to extend to show ground truth vs pred
@@ -578,14 +577,14 @@ if __name__ == '__main__':
 
 
     Weighting = {
-        'Obstacle': 5000,
+        'Obstacle': 600,
         'Tree': 300,
         'Grass': 50,
         'Road-non-flooded': 1
     }
 
     ih = imageHelper(Weighting,GenerateStartStop=False,size2=256)
-    ih.saveTrainingExamples(regen=False)
+    ih.saveTrainingExamples(regen=True)
 
     #print(ih.df)
     # x, y = ih.getTrainEx('8482.jpg', normalize=True,blurKsize=5)
@@ -594,17 +593,17 @@ if __name__ == '__main__':
     # x,y = ih.getTrainEx('6615.jpg',normalize=False,blurKsize=5)
     # ih.getWaveFrontCostForMask('6615.jpg',x,y,plottingUpSample=1)
 
-    ih.model = k.models.load_model(os.path.join('models','m5'))
+    ih.model = k.models.load_model(os.path.join('models','m9'))
     print(ih.model.summary())
 
     # x, ypred = ih.predict('6750.jpg')
     # ih.getWaveFrontCostForMask('6750.jpg', x, ypred, plottingUpSample=2)
 
 
-    # for img in ih.df.img.values:
-    #     ih.predict(img,plot=True)
-
     for img in ih.df.img.values:
-        x, ypred = ih.predict(img)
-        ih.getWaveFrontCostForMask(img, x, ypred, plottingUpSample=2)
+        ih.predict(img,plot=True)
+
+    # for img in ih.df.img.values:
+    #     x, ypred = ih.predict(img)
+    #     ih.getWaveFrontCostForMask(img, x, ypred, plottingUpSample=2)
 
