@@ -44,7 +44,7 @@ class imageHelper():
         self.segLabelsDF = pd.read_csv(os.path.join(self.pwd,'classMap.csv'))
 
         self.segLabelsDF['Nav Class Name'] = self.segLabelsDF['Class Name']
-        self.segLabelsDF.loc[~ self.segLabelsDF['Class Name'].isin(Weighting.keys()),'Nav Class Name'] = 'Obstacle'
+        self.segLabelsDF.loc[~ self.segLabelsDF['Class Name'].isin(Weighting.keys()),'Nav Class Name'] = 'Obstacle' #set all to obs
         self.segLabelsDF['nav Weight'] =  self.segLabelsDF['Nav Class Name'].apply(lambda x: Weighting[x]) # add the weighting definied as a param to this class
         self.scaleing = self.segLabelsDF['nav Weight'].max()
 
@@ -291,7 +291,7 @@ class imageHelper():
                mask.shape[1] == self.crop2x and mask.shape[0] == self.crop2y
 
         # resize for reasonable plot
-        return cv.resize(img, (int(self.crop2x // self.div), int(self.crop2y // self.div))), cv.resize(mask, (int(self.crop2x // self.div), int(self.crop2y // self.div)))
+        return cv.resize(img, (int(self.crop2x // self.div), int(self.crop2y // self.div))), cv.resize(mask, (int(self.crop2x // self.div), int(self.crop2y // self.div)),cv.INTER_NEAREST)
 
     def getValidBorderingIdx(self, col, row, mask, costMap):
 
@@ -481,11 +481,11 @@ class imageHelper():
 
     def saveTrainingExamples(self,regen=False):
 
-        X_trainDir = os.path.join(self.pwd, 'X_Train/data')
-        Y_trainDir = os.path.join(self.pwd,'Y_Train')
-        Y_trainNormDir = os.path.join(self.pwd,'Y_TrainNorm')
-        Y_trainBlurDir = os.path.join(self.pwd,'Y_TrainBlur')
-        Y_trainNormBlurDir = os.path.join(self.pwd,'Y_TrainNormBlur')
+        X_trainDir = os.path.join(self.pwd, 'X_Train_256/data')
+        Y_trainDir = os.path.join(self.pwd,'Y_Train_256')
+        Y_trainNormDir = os.path.join(self.pwd,'Y_TrainNorm_256')
+        Y_trainBlurDir = os.path.join(self.pwd,'Y_TrainBlur_256')
+        Y_trainNormBlurDir = os.path.join(self.pwd,'Y_TrainNormBlur_256')
 
         dirs = [X_trainDir,Y_trainDir,Y_trainNormDir,Y_trainBlurDir,Y_trainNormBlurDir]
 
@@ -545,7 +545,7 @@ class imageHelper():
 
 
     def predict(self,img,plot = False,destroy = True):
-        x, y = self.getTrainEx(img)
+        x, y = self.getTrainEx(img,blurKsize=11)
         ypred = np.squeeze(self.model.predict (np.expand_dims(x,axis=0)))
 
         if plot:
@@ -569,7 +569,6 @@ class imageHelper():
 
 
 
-
 if __name__ == '__main__':
 
     #todo eventually will need to extend to show ground truth vs pred
@@ -578,7 +577,7 @@ if __name__ == '__main__':
 
 
     Weighting = {
-        'Obstacle': 5000,
+        'Obstacle': 600,
         'Tree': 300,
         'Grass': 50,
         'Road-non-flooded': 1
@@ -594,7 +593,7 @@ if __name__ == '__main__':
     # x,y = ih.getTrainEx('6615.jpg',normalize=False,blurKsize=5)
     # ih.getWaveFrontCostForMask('6615.jpg',x,y,plottingUpSample=1)
 
-    ih.model = k.models.load_model(os.path.join('models','m5'))
+    ih.model = k.models.load_model(os.path.join('models','m9'))
     print(ih.model.summary())
 
     # x, ypred = ih.predict('6750.jpg')
@@ -604,7 +603,7 @@ if __name__ == '__main__':
     # for img in ih.df.img.values:
     #     ih.predict(img,plot=True)
 
-    for img in ih.df.img.values:
+    for img in ih.df.img.values[3:]:
         x, ypred = ih.predict(img)
         ih.getWaveFrontCostForMask(img, x, ypred, plottingUpSample=2)
 
