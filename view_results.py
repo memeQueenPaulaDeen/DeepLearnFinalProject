@@ -29,7 +29,7 @@ file_x = 'x_nwnbnxnyac'
 file_y = 'y_nwnbnxnyac'
 seg_model_load = True
 
-model = keras.models.load_model('./output/test/seg_model.h5')
+model = keras.models.load_model('./output/unet_cat_nobatch_relu_relu/seg_model.h5')
 
 if sys.argv[1] == '0':
 	train_x = np.load('./train/npy/'+file_x+'.npy')
