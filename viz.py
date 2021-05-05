@@ -530,6 +530,8 @@ class imageHelper():
 
     def predictClass(self,img):
         x, y = self.getImageMaskPair(img)
+        #x = cv.cvtColor(x, cv.COLOR_BGR2RGB)
+        #xp = k.applications.vgg16.preprocess_input(x)
         ypred = np.squeeze(self.model.predict(np.expand_dims(x, axis=0)))
         ypred = np.argmax(ypred,axis=2)
 
@@ -537,7 +539,7 @@ class imageHelper():
         ypredc = self.getColorForSegMap(ypred)
 
 
-        cv.imshow('x', x)
+        cv.imshow('x', x)#cv.cvtColor(x, cv.COLOR_RGB2BGR))
         cv.imshow('y', yc)
         cv.imshow('ypred', ypredc)
         cv.waitKey(0)
@@ -545,7 +547,8 @@ class imageHelper():
 
 
     def predict(self,img,plot = False,destroy = True):
-        x, y = self.getTrainEx(img,blurKsize=11)
+        x, y = self.getTrainEx(img,blurKsize=1)
+        x = cv.cvtColor(x, cv.COLOR_BGR2RGB)
         ypred = np.squeeze(self.model.predict (np.expand_dims(x,axis=0)))
 
         if plot:
@@ -555,7 +558,7 @@ class imageHelper():
             hmypred = ypred / ypred.max() * 255
             hmypred = cv.applyColorMap(hmypred.astype('uint8'), cv.COLORMAP_HOT)
 
-            cv.imshow('x',x)
+            cv.imshow('x', cv.cvtColor(x, cv.COLOR_RGB2BGR))
             cv.imshow('y',hmy)
             cv.imshow('ypred',hmypred)
             cv.waitKey(0)
@@ -577,7 +580,7 @@ if __name__ == '__main__':
 
 
     Weighting = {
-        'Obstacle': 600,
+        'Obstacle': 5000,
         'Tree': 300,
         'Grass': 50,
         'Road-non-flooded': 1
@@ -593,15 +596,18 @@ if __name__ == '__main__':
     # x,y = ih.getTrainEx('6615.jpg',normalize=False,blurKsize=5)
     # ih.getWaveFrontCostForMask('6615.jpg',x,y,plottingUpSample=1)
 
-    ih.model = k.models.load_model(os.path.join('models','m9'))
+    ih.model = k.models.load_model(os.path.join('models','m14'))
+    #ih.model = k.models.load_model('seg_model.h5')
+    #ih.model = k.models.load_model(os.path.join('output','test','seg_model.h5'))
     print(ih.model.summary())
 
     # x, ypred = ih.predict('6750.jpg')
     # ih.getWaveFrontCostForMask('6750.jpg', x, ypred, plottingUpSample=2)
 
 
-    # for img in ih.df.img.values:
-    #     ih.predict(img,plot=True)
+    for img in ih.df.img.values:
+        #ih.predict(img,plot=True)
+        ih.predictClass(img)
 
     for img in ih.df.img.values[3:]:
         x, ypred = ih.predict(img)

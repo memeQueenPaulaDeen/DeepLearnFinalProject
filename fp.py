@@ -26,6 +26,44 @@ physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
+def getColorForSegMap( mask: np.array) -> np.array:
+    # in BGR for open cv lib Human readable
+
+    mask = np.argmax(mask,axis=2)
+    cmapFullClass = {
+        'Background': (0, 0, 0),  # black
+        'Building-flooded': (242, 23, 140),  # purple
+        'Building-non-flooded': (27, 104, 239),  # orange
+        'Road-flooded': (255, 255, 255),  # white
+        'Road-non-flooded': (48, 84, 111),  # brown
+        'Water': (242, 227, 23),  # light blue
+        'Tree': (23, 242, 234),  # yellow
+        'Vehicle': (125, 124, 125),  # grey
+        'Pool': (202, 70, 13),  # dark blue
+        'Grass': (0, 255, 0),  # green
+    }
+
+    # Translate encodeing to human readable
+    m2Class = {
+        0: 'Background',
+        1: 'Building-flooded',
+        2: 'Building-non-flooded',
+        3: 'Road-flooded',
+        4: 'Road-non-flooded',
+        5: 'Water',
+        6: 'Tree',
+        7: 'Vehicle',
+        8: 'Pool',
+        9: 'Grass'
+    }
+
+    result = np.zeros((mask.shape[0], mask.shape[1], 3))
+
+    for m in m2Class.keys():
+        result[mask == m] = cmapFullClass[m2Class[m]]
+
+    return result.astype('uint8')
+
 class USHelp():
 
     def __init__(self,imgFolderPath):
@@ -81,18 +119,18 @@ class USHelp():
                     y.append([self.manuelEst(xi)])
                 y = np.concatenate(y)
 
-                for i in range(len(x)):
-                    xi = x[i]
-                    yi = y[i]
-
-                    xi, yi = flip(xi, yi, )
-                    xi, yi = zoom(xi, yi, .2)
-                    xi, yi = shift(xi, yi, .3)
-                    xi, yi = rotate(xi, yi, 5)
-                    xi, yi = noise(xi, yi, .05)
-
-                    x[i] = xi
-                    y[i] = yi
+                # for i in range(len(x)):
+                #     xi = x[i]
+                #     yi = y[i]
+                #
+                #     xi, yi = flip(xi, yi, )
+                #     xi, yi = zoom(xi, yi, .2)
+                #     xi, yi = shift(xi, yi, .3)
+                #     xi, yi = rotate(xi, yi, 5)
+                #     xi, yi = noise(xi, yi, .05)
+                #
+                #     x[i] = xi
+                #     y[i] = yi
 
                 # if categorical
                 # y = (np.arange(y.max()+1) == y[...,None]).astype(int)
@@ -293,7 +331,7 @@ def noise(x,y,cut):
 
 
 
-def getGen(XDir,yDir,batchSize,inputShape):
+def getGen(XDir,yDir,batchSize,inputShape,categorical = False):
     tg = k.preprocessing.image.ImageDataGenerator(validation_split=.2)
     trainSet = tg.flow_from_directory(XDir,
                                       target_size=inputShape[0:-1],
@@ -310,8 +348,11 @@ def getGen(XDir,yDir,batchSize,inputShape):
                                     subset='validation',
                                     shuffle=False)
 
-    trainItrPerEpoch = int(len(trainSet.classes) / trainSet.batch_size)
-    valItrPerEpoch = int(len(valSet.classes) / valSet.batch_size)
+
+    augLoops = 1
+    numAugs = 6
+    trainItrPerEpoch = (int(len(trainSet.classes) / trainSet.batch_size)-1) * numAugs * augLoops
+    valItrPerEpoch = int(len(valSet.classes) / valSet.batch_size) -1
 
     def generator_train():
         tg1 = k.preprocessing.image.ImageDataGenerator(validation_split=.2,channel_shift_range=.3,brightness_range=(.7,1))
@@ -321,39 +362,65 @@ def getGen(XDir,yDir,batchSize,inputShape):
                                            batch_size=batchSize,
                                            color_mode="rgb",
                                            class_mode='input',
-                                           subset='training', )
-                                          # shuffle=False)
+                                           subset='training',
+                                            shuffle=False)
 
         files = trainGen.filenames
         ynames = [os.path.join(yDir,f.split(os.sep)[-1].split('.')[0]+'.npy') for f in files]
+
         while True:
 
             x = trainGen.__next__()[0]
             y = []
             fnames = ynames[trainGen.batch_index*batchSize - batchSize: trainGen.batch_index*batchSize]
             for fname in fnames:
-                y.append( [np.load(fname).transpose()])
+                y.append( [np.load(fname)])
             y = np.concatenate(y)
 
+            augedx = []
+            augedy = []
             for i in range(len(x)):
                 xi = x[i]
                 yi = y[i]
 
-                xi, yi = flip(xi, yi,)
-                xi, yi = zoom(xi, yi,.2)
-                xi, yi = shift(xi,yi,.3)
-                xi, yi = rotate(xi,yi,5)
-                xi, yi = noise(xi,yi,.05)
+                for i in range(augLoops):
+                    xi1, yi1 = flip(xi, yi,)
+                    xi2, yi2 = zoom(xi, yi,.35+i/20)
+                    xi3, yi3 = shift(xi,yi,.2+i/20)
+                    xi4, yi4 = rotate(xi,yi,5+i)
+                    xi5, yi5 = noise(xi,yi,.05+i/40)
 
-                x[i] = xi
-                y[i] = yi
+                    augedx.append(xi), augedx.append(xi1), augedx.append(xi2), augedx.append(xi3), augedx.append(xi4), augedx.append(xi5)
+                    augedy.append(yi), augedy.append(yi1), augedy.append(yi2), augedy.append(yi3), augedy.append(yi4), augedy.append(yi5)
+
+            augedx = augedx[0:len(augedx) - len(augedx) % batchSize]
+            augedy = augedy[0:len(augedy) - len(augedy) % batchSize]
+
+            c = list(zip(augedx, augedy))
+            random.shuffle(c)
+            augedx, augedy = zip(*c)
 
 
-            #if categorical
-            #y = (np.arange(y.max()+1) == y[...,None]).astype(int)
 
-            yield x,y
-            trainGen.reset()
+            while len(augedx) > 0:
+
+                nextX = augedx[0:batchSize]
+                augedx = augedx[batchSize:]
+
+                nextY = augedy[0:batchSize]
+                augedy = augedy[batchSize:]
+
+                x = np.concatenate([nextX])
+                y = np.concatenate([nextY])
+
+                if categorical:
+                    y = (np.arange(10) == y[...,None]).astype(int)
+
+                    yield x,y.astype('float32')
+
+            if trainGen.batch_index*batchSize >= len(trainSet.classes)-batchSize:
+                trainGen.reset()
+                del x, y, augedx, augedy, nextY, nextX,c
 
 
     def generator_val():
@@ -364,8 +431,8 @@ def getGen(XDir,yDir,batchSize,inputShape):
                                          batch_size=batchSize,
                                          color_mode="rgb",
                                          class_mode='input',
-                                         subset='validation', )
-                                          #shuffle=False)
+                                         subset='validation',
+                                          shuffle=False)
 
         files = valGen.filenames
         ynames = [os.path.join(yDir,f.split(os.sep)[-1].split('.')[0]+'.npy') for f in files]
@@ -375,16 +442,129 @@ def getGen(XDir,yDir,batchSize,inputShape):
             y = []
             fnames = ynames[valGen.batch_index*batchSize - batchSize: valGen.batch_index*batchSize]
             for fname in fnames:
-                y.append( [np.load(fname).transpose()])
+                y.append( [np.load(fname)])
             y = np.concatenate(y)
 
-            # if categorical
-            #y = (np.arange(y.max() + 1) == y[..., None]).astype(int)
+            if categorical:
+                y = (np.arange(10) == y[..., None]).astype(int)
 
-            yield x,y
-            valGen.reset()
+            yield x,y.astype('float32')
+
+            if valGen.batch_index*batchSize >= len(valSet.classes) -batchSize:
+                valGen.reset()
+                del x, y
+
+    # idx = 0
+    # for x,y in generator_train():
+    #
+    #     bidx = 0
+    #     for xi in x:
+    #         cv.imshow('x',xi.astype('uint8'))
+    #         cv.imshow('y',getColorForSegMap(y[bidx]))
+    #         cv.waitKey(0)
+    #         cv.destroyAllWindows()
+    #         bidx = bidx + 1
+    #         idx = idx + 1
+    #         print(idx)
 
     return generator_train(), generator_val(), trainItrPerEpoch, valItrPerEpoch
+
+
+def activation(x, _type):
+    if _type.lower() == 'leaky':
+        return LeakyReLU(.1)(x)
+    elif _type.lower() == 'relu':
+        return k.layers.ReLU()(x)
+    elif _type.lower() == 'max_relu':
+        return k.layers.ReLU(max_value=1.0)(x)
+    elif _type.lower == 'softmax':
+        return k.layers.Softmax()(x)
+
+def gen_VGG_unet_model(input_shape, num_classes, params):
+    cat, batch, _type, out_type = params
+
+    #https://www.kaggle.com/basu369victor/transferlearning-and-unet-to-segment-rocks-on-moon
+
+    vgg = k.applications.vgg16.VGG16(include_top=False, weights= 'imagenet',input_shape=input_shape)
+
+    for layer in vgg.layers:
+        layer.trainable = False
+
+    un = Conv2DTranspose(256,(9,9),strides=(2,2),padding='same')(vgg.output)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    concat_1 = concatenate([un, vgg.get_layer("block5_conv3").output])
+
+    un = Conv2D(512,(3,3),strides=(1,1),padding='same')(concat_1)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    un = Conv2DTranspose(512, (3, 3), strides=(2, 2),padding='same')(un)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    concat_2 = concatenate([un, vgg.get_layer("block4_conv3").output])
+
+    un = Conv2D(512, (3, 3), strides=(1, 1), padding='same')(concat_2)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    un = Conv2DTranspose(512, (3, 3), strides=(2, 2),padding='same')(un)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    concat_3 = concatenate([un, vgg.get_layer("block3_conv3").output])
+
+    un = Conv2D(256, (3, 3), strides=(1, 1), padding='same')(concat_3)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    un = Conv2DTranspose(256, (3, 3), strides=(2, 2), padding='same')(un)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    concat_4 = concatenate([un, vgg.get_layer("block2_conv2").output])
+
+    un = Conv2D(128, (3, 3), strides=(1, 1), padding='same')(concat_4)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    un = Conv2DTranspose(128, (3, 3), strides=(2, 2), padding='same')(un)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    concat_5 = concatenate([un, vgg.get_layer("block1_conv2").output])
+
+    un = Conv2D(64, (3, 3), strides=(1, 1), padding='same')(concat_5)
+    un = activation(un, _type)
+    if batch:
+        un = BatchNormalization()(un)
+
+    if cat:
+      # reconstruct segmentation map -> try one hot encoding style (num layers = num classes)
+      un = Conv2D(num_classes,(3,3),strides=(1, 1),padding='same')(un)
+    else:
+      # reconstruct segmentation map as 1 layer labeled image
+      un = Conv2D(1,(3,3),strides=(1, 1),padding='same')(un)
+      # weighting = tf.Tensor([5000, 5000, 5000, 5000, 1, 5000, 500, 5000, 5000, 50], 'float32')
+      # un = k.layers.Lambda(lambda x: tf.matmul(x, tf.expand_dims(weighting, axis=1)))(un)
+
+    un = activation(un, out_type)
+
+    un = Model(inputs= vgg.input, outputs= un)
+
+    return un
+
 
 
 def genVGGBasedModel(input_shape):
@@ -406,55 +586,62 @@ def genVGGBasedModel(input_shape):
     un = LeakyReLU(.1)(un)
     un = BatchNormalization()(un)
 
-    concat_1 = concatenate([un, vgg.get_layer("block5_conv3").output])
+    DSb3 = Conv2D(512, (1, 1), strides=(4, 4), padding='same')(vgg.get_layer("block3_conv3").output)
+    DSb4 =  Conv2D(512,(1,1),strides=(2,2),padding='same')(vgg.get_layer("block4_conv3").output)
+    concat_1 = concatenate([un, vgg.get_layer("block5_conv3").output])#,DSb4,DSb3])
 
     un = Conv2D(512,(3,3),strides=(1,1),padding='same')(concat_1)
     un = LeakyReLU(.1)(un)
-    un = BatchNormalization()(un)
+    #un = BatchNormalization()(un)
 
     un = Conv2DTranspose(512, (3, 3), strides=(2, 2),padding='same')(un)
     un = LeakyReLU(.1)(un)
-    un = BatchNormalization()(un)
+    #un = BatchNormalization()(un)
 
-    concat_2 = concatenate([un, vgg.get_layer("block4_conv3").output])
+    DSb3 = Conv2D(64, (1, 1), strides=(2, 2), padding='same')(vgg.get_layer("block3_conv3").output)
+    UsB5 = Conv2DTranspose(64, (3, 3), strides=(2, 2),padding='same')(vgg.get_layer("block5_conv3").output)
+    concat_2 = concatenate([un, vgg.get_layer("block4_conv3").output])#,DSb3,UsB5])
 
     un = Conv2D(512, (3, 3), strides=(1, 1), padding='same')(concat_2)
     un = LeakyReLU(0.1)(un)
-    un = BatchNormalization()(un)
+    #un = BatchNormalization()(un)
 
     un = Conv2DTranspose(512, (3, 3), strides=(2, 2),padding='same')(un)
     un = LeakyReLU(0.1)(un)
-    un = BatchNormalization()(un)
+    #un = BatchNormalization()(un)
 
+    DSb2 = Conv2D(64, (1, 1), strides=(2, 2), padding='same')(vgg.get_layer("block2_conv2").output)
+    UsB5 = Conv2DTranspose(64, (5, 5), strides=(4, 4),padding='same')(vgg.get_layer("block5_conv3").output)
+    UsB4 = Conv2DTranspose(64, (3, 3), strides=(2, 2),padding='same')(vgg.get_layer("block4_conv3").output)
     concat_3 = concatenate([un, vgg.get_layer("block3_conv3").output])
 
     un = Conv2D(256, (3, 3), strides=(1, 1), padding='same')(concat_3)
     un = LeakyReLU(0.1)(un)
-    un = BatchNormalization()(un)
+    #un = BatchNormalization()(un)
 
     un = Conv2DTranspose(256, (3, 3), strides=(2, 2), padding='same')(un)
     un = LeakyReLU(0.1)(un)
-    un = BatchNormalization()(un)
+    #un = BatchNormalization()(un)
 
     concat_4 = concatenate([un, vgg.get_layer("block2_conv2").output])
 
     un = Conv2D(128, (3, 3), strides=(1, 1), padding='same')(concat_4)
     un = LeakyReLU(0.1)(un)
-    un = BatchNormalization()(un)
+    #un = BatchNormalization()(un)
 
     un = Conv2DTranspose(128, (3, 3), strides=(2, 2), padding='same')(un)
     un = LeakyReLU(0.1)(un)
-    un = BatchNormalization()(un)
+    #un = BatchNormalization()(un)
 
     concat_5 = concatenate([un, vgg.get_layer("block1_conv2").output])
 
     un = Conv2D(64, (3, 3), strides=(1, 1), padding='same')(concat_5)
     un = LeakyReLU(0.1)(un)
-    un = BatchNormalization()(un)
+    #un = BatchNormalization()(un)
 
 
 
-    un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation=rampMax)(un)
+    un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation='softmax')(un)
 
     ##ramp max activation
     #un = Conv2D(1, (3,3), strides=(1, 1), padding='same',activation=rampMax)(un)
@@ -528,39 +715,47 @@ def gen_model(input_shape, num_classes):
 def rampMax(x):
     return k.backend.relu(x,max_value=1)
 
-def run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch):
+def run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch,categorical):
     ########## Program Variables ##########
     num_epochs, batch_size, optimizer = run_params
     input_shape, num_classes = model_params
 
     ########### Generating and Training Model #########
     #model = gen_model(input_shape, num_classes)
-    model = genVGGBasedModel(input_shape)
 
-    model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy',"mean_squared_error"])
-    #model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+    #categorical, Do batch Norm, _type, out_type
+    p = (categorical,False,'relu','relu')
+    model = gen_VGG_unet_model(input_shape,num_classes,p)
+
+    if not categorical:
+        model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy'])
+    else:
+        model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     print(model.summary())
     k.utils.plot_model(model, 'mvgg.png', show_shapes=True)
 
     es= k.callbacks.EarlyStopping(monitor='val_loss',restore_best_weights=True,patience=7)
-    cbs = [es]
+    rlronp = k.callbacks.ReduceLROnPlateau(monitor='loss',factor=.5,patience=3)
+    cbs = [es,rlronp]
 
     # XTrainDir = os.path.join('DD','X_Train')
     # YTrainDir = os.path.join('DD','Y_Train')
 
-    us = USHelp(os.path.join('Unlabeled','image'))
+    # us = USHelp(os.path.join('Unlabeled','image'))
+    #
+    # generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = us.getGen(batch_size)
 
-    generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = us.getGen(batch_size)
+    history = model.fit(generator_train,
+                        epochs=num_epochs,
+                        batch_size=batch_size,
+                        steps_per_epoch=trainItrPerEpoch,
+                        validation_steps=valItrPerEpoch,
+                        validation_data=generator_val,
+                        shuffle=True,
+                        callbacks=cbs)
 
-    # history = model.fit(generator_train,
-    #                     epochs=10,
-    #                     batch_size=batch_size,
-    #                     steps_per_epoch=trainItrPerEpoch,
-    #                     validation_steps=valItrPerEpoch,
-    #                     validation_data=generator_val)
-    #                     #callbacks=cbs)
+    #model = k.models.load_model(os.path.join('models','m13'))
 
-    model = k.models.load_model(os.path.join('models','ssm1'))
 
 
     # for layer in model.layers:
@@ -571,22 +766,22 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
     #     else:
     #         layer.trainable = True
 
-    XTrainDir = 'X_Train_256'
-    YTrainDir = 'Y_TrainNormBlur_256'
+    # XTrainDir = 'X_Train_256'
+    # YTrainDir = 'Y_TrainNormBlur_256'
 
-    generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = getGen(XTrainDir, YTrainDir, batch_size,input_shape)
+    # generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = getGen(XTrainDir, YTrainDir, batch_size,input_shape)
     #
     # #model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-    model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy',"mean_squared_error"])
-
-    print('fine tune')
-    history = model.fit(generator_train,
-                        epochs=num_epochs,
-                        batch_size=batch_size,
-                        steps_per_epoch=trainItrPerEpoch,
-                        validation_steps=valItrPerEpoch,
-                        validation_data=generator_val,
-                        callbacks=cbs)
+    # model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy',"mean_squared_error"])
+    #
+    # print('fine tune')
+    # history = model.fit(generator_train,
+    #                     epochs=num_epochs,
+    #                     batch_size=batch_size,
+    #                     steps_per_epoch=trainItrPerEpoch,
+    #                     validation_steps=valItrPerEpoch,
+    #                     validation_data=generator_val,
+    #                     callbacks=cbs)
 
     return history, model
 
@@ -595,31 +790,38 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
 
 if __name__ == '__main__':
 
-    num_epochs = 100
-    batchSize = 4
+    num_epochs = 20
+    batchSize = 8
     optimizer = Adam(lr=1e-4)
 
     Weighting = {
-        'Obstacle': 600,
+        'Obstacle': 10000,
         'Tree': 300,
         'Grass': 50,
         'Road-non-flooded': 1
     }
 
+    categorical = False
+
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
-    XTrainDir = 'X_Train_256'
-    YTrainDir = 'Y_TrainNormBlur_256'
+
+    if categorical:
+        XTrainDir = 'X_Train_OG_256'
+        YTrainDir = 'Y_Train_OG_256'
+    else:
+        XTrainDir = 'X_Train_256'
+        YTrainDir = 'Y_TrainNormBlur_256'
 
 
     input_shape = (256, 256, 3)
-    num_classes = len(Weighting)
+    num_classes = 10#len(Weighting)
 
-    generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = getGen(XTrainDir, YTrainDir, batchSize, input_shape)
+    generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch = getGen(XTrainDir, YTrainDir, batchSize, input_shape,categorical=categorical)
 
     run_params = (num_epochs, batchSize, optimizer)
     model_params = (input_shape, num_classes)
 
-    history, model = run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch)
+    history, model = run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch,categorical)
 
-    model.save(os.path.join(pwd,'models','m10'))
-    dump(history.history, open(pwd + '/history.pkl', 'wb'))
+    model.save(os.path.join(pwd,'models','m14'))
+    dump(history.history, open(pwd + 'history.pkl', 'wb'))
