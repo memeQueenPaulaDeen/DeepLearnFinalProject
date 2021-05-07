@@ -436,11 +436,14 @@ class imageHelper():
 
         scaleFactor = plottingUpSample * calc_downSample
 
-        sx, sy = 0, 0
-        ex, ey = 0 ,0
-        while np.linalg.norm(np.array([sx,sy])-np.array([ex,ey]),1) < .25 * yGT.shape[yidx]//calc_downSample:
-            sx, sy = random.randint(5,yGT.shape[xidx]-5)//calc_downSample, random.randint(5,yGT.shape[yidx]-5)//calc_downSample
-            ex, ey = random.randint(5,yGT.shape[xidx]-5)//calc_downSample, random.randint(5,yGT.shape[yidx]-5)//calc_downSample
+        # sx, sy = 0, 0
+        # ex, ey = 0 ,0
+        # while np.linalg.norm(np.array([sx,sy])-np.array([ex,ey]),1) < .25 * yGT.shape[yidx]//calc_downSample:
+        #     sx, sy = random.randint(5,yGT.shape[xidx]-5)//calc_downSample, random.randint(5,yGT.shape[yidx]-5)//calc_downSample
+        #     ex, ey = random.randint(5,yGT.shape[xidx]-5)//calc_downSample, random.randint(5,yGT.shape[yidx]-5)//calc_downSample
+
+        sx, sy = 5, yGT.shape[yidx]//calc_downSample -10
+        ex, ey = yGT.shape[yidx]-30, 10
 
         costMapGT, hmGT = self.do_wavefront(calc_downSample, ex, ey, img, scaleFactor, xidx, yidx, yGT)
         costMapPred, hmPred = self.do_wavefront(calc_downSample, ex, ey, img, scaleFactor, xidx, yidx, ypred)
@@ -718,7 +721,7 @@ class imageHelper():
         self.model = k.models.load_model(model)
         print('now evaluating Model: ' + model)
         df = pd.DataFrame([])
-        imgs = self.df.head(10).img.values
+        imgs = self.df[7:17].img.values
         idx = 0
         type = 'regresion'
         for img in imgs:
