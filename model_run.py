@@ -52,8 +52,9 @@ def run_model(base_dir_out, in_files, run_params, seg_params):
 		plot_model(seg_model, to_file=base_dir_out+'/seg_model.png', show_shapes=True)
 		seg_model.compile(optimizer = optimizer, loss = _loss, metrics = ['accuracy'])
 
+		rlronp = k.callbacks.ReduceLROnPlateau(monitor='loss',factor=.5,patience=3)
 		es= k.callbacks.EarlyStopping(monitor='val_loss',restore_best_weights=True,patience=7)
-		cbs = [es]
+		cbs = [es, rlronp]
 
 		train_x_seg = np.load('./train/npy/'+file_x_seg+'.npy')
 		train_y_seg = np.load('./train/npy/'+file_y_seg+'.npy')
@@ -85,10 +86,11 @@ def run_model(base_dir_out, in_files, run_params, seg_params):
 	if run_cost_model:
 		cost_model = gen_cost_model(seg_model, input_shape, num_classes)
 		plot_model(cost_model, to_file=base_dir_out+'/cost_model.png', show_shapes=True)
-		cost_model.compile(optimizer = optimizer, loss = 'mse', metrics = ['accuracy', 'mean_squared_error'])
+		cost_model.compile(optimizer = optimizer, loss = 'mse', metrics = ['accuracy'])
 
+		rlronp2 = k.callbacks.ReduceLROnPlateau(monitor='loss',factor=.5,patience=3)
 		es2= k.callbacks.EarlyStopping(monitor='val_loss',restore_best_weights=True,patience=7)
-		cbs2 = [es2]
+		cbs2 = [es2, rlronp2]
 
 		train_x_cost = np.load('./train/npy/'+file_x_cost+'.npy')
 		train_y_cost = np.load('./train/npy/'+file_y_cost+'.npy')
@@ -108,22 +110,22 @@ def run_model(base_dir_out, in_files, run_params, seg_params):
 					verbose = 1, 
 					callbacks = cbs2)
 
-		show_history(full_hist)
+		show_history(history.history)
 
 
 		cost_model.save(base_dir_out+'/cost_model.h5')
-		dump(full_hist, open(base_dir_out+'/cost_history.pkl', 'wb'))
+		dump(history.history, open(base_dir_out+'/cost_history.pkl', 'wb'))
 
 
 ###########################################
 #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
-base_dir_out ='./output/vgg_nocat_nobatch_relu_relu' 
+base_dir_out ='./output/cost_vgg_nocat_batch_relu_maxrelu_nonormcaty_normcosty_trainable_blur20' 
 
-file_x_seg = 'x_wbnxnyanc'
-file_y_seg = 'y_wbnxnyanc'
-file_x_cost = None
-file_y_cost = None
+file_x_seg = 'x_nwbbnxnyac'
+file_y_seg = 'y_nwbbnxnyac'
+file_x_cost = 'x_wbbnxyanc'
+file_y_cost = 'y_wbbnxyanc'
 
 in_files = (file_x_seg, file_y_seg, file_x_cost, file_y_cost)
 
@@ -133,14 +135,14 @@ optimizer = Adam(lr=1e-4)
 num_classes = 10
 
 run_seg_model = True
-run_cost_model = False
-seg_version = 'vgg-unet' #'unet'
-loss = 'mse'#'categorical_crossentropy'
+run_cost_model = True
+seg_version = 'vgg-unet'
+loss = 'mse'
 
-cat = False
-batch = False
+cat = True
+batch = True
 act_type = 'relu'
-out_type = 'relu'
+out_type = 'max-relu'
 
 run_params = (num_epochs, batch_size, optimizer, num_classes)
 model_params = (cat, batch, act_type, out_type)
