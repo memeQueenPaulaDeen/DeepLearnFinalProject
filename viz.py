@@ -443,7 +443,7 @@ class imageHelper():
         #     ex, ey = random.randint(5,yGT.shape[xidx]-5)//calc_downSample, random.randint(5,yGT.shape[yidx]-5)//calc_downSample
 
         sx, sy = 5, yGT.shape[yidx]//calc_downSample -10
-        ex, ey = yGT.shape[yidx]-30, 10
+        ex, ey = yGT.shape[yidx]//calc_downSample-30, 10
 
         costMapGT, hmGT = self.do_wavefront(calc_downSample, ex, ey, img, scaleFactor, xidx, yidx, yGT)
         costMapPred, hmPred = self.do_wavefront(calc_downSample, ex, ey, img, scaleFactor, xidx, yidx, ypred)
@@ -721,6 +721,8 @@ class imageHelper():
         self.model = k.models.load_model(model)
         print('now evaluating Model: ' + model)
         df = pd.DataFrame([])
+        # easy = ['6463.jpg','7077.jpg','7078.jpg','7083.jpg','7192.jpg','7650.jpg','8407.jpg','8482.jpg']
+        # imgs = self.df.loc[self.df.img.isin(easy)].img.values
         imgs = self.df[7:17].img.values
         idx = 0
         type = 'regresion'
@@ -738,7 +740,8 @@ class imageHelper():
 
                 ypred = result
 
-
+            #ypred = cv.GaussianBlur(ypred, (55, 55), 15)
+            #ypred = cv.blur(ypred, (33, 33))
             pathCostGT, pathCostPred = ih.getPathCost(img, x, ypred, os.path.join(outputFolder,model),plottingUpSample=2,calc_downSample=2)
 
             row = {'img': img,
