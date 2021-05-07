@@ -16,13 +16,19 @@ def activation(x, _type):
 
 def gen_cost_model(seg_model, input_shape, num_classes):
 
+    num = 0
     for layer in seg_model.layers:
-        layer.trainable = False
+        layer.trainable = True
+        layer._name = 'layer_{}'.format(num)
+        num += 1
 
     # Cost Map extension
-    conv11 = Conv2D(num_classes, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(seg_model.output)
-    conv11 = Conv2D(num_classes, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv11)
-    conv11 = Conv2D(1, 3, activation = 'softmax', padding = 'same', kernel_initializer = 'he_normal')(conv11)  
+    conv11 = Conv2D(8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal', name='cost_1')(seg_model.output)
+    conv11 = Conv2D(4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal', name='cost_2')(conv11)
+    conv11 = Conv2D(2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal', name='cost_3')(conv11)
+    conv11 = Conv2D(1, 3, padding = 'same', kernel_initializer = 'he_normal', name='cost_4')(conv11)  
+    
+    conv11 = activation(conv11, 'max-relu')
 
     cost_model = Model(inputs= seg_model.input, outputs= conv11)
     return cost_model

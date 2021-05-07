@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import keras
@@ -25,13 +26,31 @@ def convert_mask(mask, mask_type=0):
 
     return new_mask
 
-file_x = 'x_nwnbnxnyac'
-file_y = 'y_nwnbnxnyac'
-seg_model_load = True
+seg_model_load = False
 
-model = keras.models.load_model('./output/unet_cat_nobatch_relu_relu/seg_model.h5')
+if seg_model_load:
+	model_name = 'seg_model.h5'
+	file_x = 'x_wbnxnyac'
+	file_y = 'y_wbnxnyac'
+
+else:
+	model_name = 'cost_model.h5'
+	file_x = 'x_wbbnxyanc'
+	file_y = 'y_wbbnxyanc'
+	
+model = keras.models.load_model('./output/cost_vgg_nocat_batch_relu_maxrelu_nonormcaty_normcosty_trainable_blur20/'+model_name)
+file_n = np.load('./train/npy/file_names.npy')
+file_names = []
+for file in file_n:
+	file_names.append(file)
+	file_names.append(file)
+	file_names.append(file)
+	file_names.append(file)
+	file_names.append(file)
+	file_names.append(file)
 
 if sys.argv[1] == '0':
+
 	train_x = np.load('./train/npy/'+file_x+'.npy')
 	train_y = np.load('./train/npy/'+file_y+'.npy')
 
@@ -42,7 +61,8 @@ if sys.argv[1] == '0':
 		a = int(input('Next: '))
 		if a == -1:
 			break
-			
+		print('Filename : ', file_names[num])
+		
 		_input = train_x[num]
 		mask = train_y[num]
 
@@ -64,14 +84,47 @@ if sys.argv[1] == '0':
 			plt.imshow(mask_new, cmap='Set1')
 		else:
 			plt.figure(2)
-			plt.imshow(output[:,:, 0])
+			plt.imshow(output[:,:, 0], cmap='hot')
 			plt.figure(3)
-			plt.imshow(mask)
+			plt.imshow(mask, cmap='hot')
 		plt.show()
 
 		plt.close(1)
 		plt.close(2)
 		plt.close(3)
+elif sys.argv[1] == '1':
+	files = []
+	for file in os.listdir('./test/image_001'):
+		files.append('./test/image_001/'+file)
+
+	while True:
+		num = np.random.randint(len(files))	
+		a = int(input('Next: '))
+		if a == -1:
+			break
+		print('Filename: ', files[num])
+		
+		img = cv2.imread(files[num])
+		if img.shape[0] > 256 and img.shape[1] > 256:
+			cx = int(img.shape[0]/2)
+			cy = int(img.shape[1]/2)
+			img = img [cx-256:cx+256, cy-256:cy+256]
+
+			img = cv2.resize(img, (256,256), interpolation=cv2.INTER_NEAREST)
+
+		_input = np.expand_dims(img, axis=0)
+		out = model.predict(_input, verbose=0)[0]
+		out = convert_mask(out, 1)
+
+		plt.figure(1)
+		plt.imshow(img)
+			
+		plt.figure(2)
+		plt.imshow(out)
+		plt.show()
+		
+		plt.close(1)
+		plt.close(2)
 else:
 	img = cv2.imread(sys.argv[1])
 	print(img.shape)	

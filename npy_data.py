@@ -40,7 +40,8 @@ def make_data(x_dir, y_dir, out_dir, out_names, params):
             y[y==8] = 600 #pool
             y[y==9] = 50  #grass
         if blur_y:
-            y = cv2.GaussianBlur(y, (5,5), 0.1)
+            #y = cv2.GaussianBlur(y, (5,5), 0.5)
+            y = cv2.GaussianBlur(y, (25,25), 0)
             y = y.astype(np.int16)
         
         data = []
@@ -107,7 +108,7 @@ aug = True
 cat = True
 
 params = (num_classes, weight, blur_y, norm_x, norm_y, aug, cat)
-out_names = ('x_nwbnxnyac', 'y_nwbnxnyac')
+out_names = ('x_nwbbnxnyac', 'y_nwbbnxnyac')
 
 
 #save_names(x_dir, 'jpg', out_dir)
