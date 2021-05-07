@@ -392,6 +392,9 @@ def getGen(XDir,yDir,batchSize,inputShape,categorical = False):
 
                     augedx.append(xi), augedx.append(xi1), augedx.append(xi2), augedx.append(xi3), augedx.append(xi4), augedx.append(xi5)
                     augedy.append(yi), augedy.append(yi1), augedy.append(yi2), augedy.append(yi3), augedy.append(yi4), augedy.append(yi5)
+                    del xi1, yi1, xi2, yi2, xi3, yi3, xi4, yi4, xi5, yi5
+
+                del xi, yi
 
             augedx = augedx[0:len(augedx) - len(augedx) % batchSize]
             augedy = augedy[0:len(augedy) - len(augedy) % batchSize]
@@ -413,14 +416,18 @@ def getGen(XDir,yDir,batchSize,inputShape,categorical = False):
                 x = np.concatenate([nextX])
                 y = np.concatenate([nextY])
 
+                del nextY, nextX
+
                 if categorical:
                     y = (np.arange(10) == y[...,None]).astype(int)
 
-                    yield x,y.astype('float32')
+                #y = y.astype('float32')
+                yield x, y
 
             if trainGen.batch_index*batchSize >= len(trainSet.classes)-batchSize:
                 trainGen.reset()
-                del x, y, augedx, augedy, nextY, nextX,c
+                k.backend.clear_session()
+            del x, y, augedx, augedy,c
 
 
     def generator_val():
@@ -448,11 +455,12 @@ def getGen(XDir,yDir,batchSize,inputShape,categorical = False):
             if categorical:
                 y = (np.arange(10) == y[..., None]).astype(int)
 
-            yield x,y.astype('float32')
+            y = y.astype('float32')
+            yield x, y
 
             if valGen.batch_index*batchSize >= len(valSet.classes) -batchSize:
                 valGen.reset()
-                del x, y
+            del x, y
 
     # idx = 0
     # for x,y in generator_train():
@@ -460,7 +468,12 @@ def getGen(XDir,yDir,batchSize,inputShape,categorical = False):
     #     bidx = 0
     #     for xi in x:
     #         cv.imshow('x',xi.astype('uint8'))
-    #         cv.imshow('y',getColorForSegMap(y[bidx]))
+    #         if categorical:
+    #             cv.imshow('y',getColorForSegMap(y[bidx]))
+    #         else:
+    #             hmy = y[bidx] / y[bidx].max() * 255
+    #             hmy = cv.applyColorMap(hmy.astype('uint8'), cv.COLORMAP_HOT)
+    #             cv.imshow('heatMap',hmy)
     #         cv.waitKey(0)
     #         cv.destroyAllWindows()
     #         bidx = bidx + 1
@@ -555,6 +568,8 @@ def gen_VGG_unet_model(input_shape, num_classes, params):
       un = Conv2D(num_classes,(3,3),strides=(1, 1),padding='same')(un)
     else:
       # reconstruct segmentation map as 1 layer labeled image
+
+
       un = Conv2D(1,(3,3),strides=(1, 1),padding='same')(un)
       # weighting = tf.Tensor([5000, 5000, 5000, 5000, 1, 5000, 500, 5000, 5000, 50], 'float32')
       # un = k.layers.Lambda(lambda x: tf.matmul(x, tf.expand_dims(weighting, axis=1)))(un)
@@ -702,7 +717,7 @@ def gen_model(input_shape, num_classes):
     conv9 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(merge9)
     conv9 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv9)
     conv9 = Conv2D(2, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv9)
-    conv10 = Conv2D(1, 1, activation='sigmoid')(conv9)
+    conv10 = Conv2D(10, 1, activation='sigmoid')(conv9)
 
     # Cost Map extension
     # conv11 = Conv2D(num_classes, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv10)
@@ -724,8 +739,11 @@ def run_model(run_params, model_params,generator_train, generator_val, trainItrP
     #model = gen_model(input_shape, num_classes)
 
     #categorical, Do batch Norm, _type, out_type
+
+    #categorical should be True, false relu relu, regresion false, True, relu , max relu
     p = (categorical,False,'relu','relu')
     model = gen_VGG_unet_model(input_shape,num_classes,p)
+    #model = gen_model(input_shape,num_classes)
 
     if not categorical:
         model.compile(optimizer=optimizer, loss='mse', metrics=['accuracy'])
@@ -801,7 +819,7 @@ if __name__ == '__main__':
         'Road-non-flooded': 1
     }
 
-    categorical = False
+    categorical = True
 
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
 
@@ -823,5 +841,5 @@ if __name__ == '__main__':
 
     history, model = run_model(run_params, model_params,generator_train, generator_val, trainItrPerEpoch, valItrPerEpoch,categorical)
 
-    model.save(os.path.join(pwd,'models','m14'))
-    dump(history.history, open(pwd + 'history.pkl', 'wb'))
+    model.save(os.path.join(pwd,'models','m4'))
+    dump(history.history, open('historym4.pkl', 'wb'))
