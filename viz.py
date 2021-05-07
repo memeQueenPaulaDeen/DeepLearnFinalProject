@@ -437,7 +437,7 @@ class imageHelper():
         scaleFactor = plottingUpSample * calc_downSample
 
 
-        sx, sy, ex, ey =  random.randint(0,yGT.shape[xidx])//calc_downSample-1, random.randint(0,yGT.shape[yidx])//calc_downSample-1, random.randint(0,yGT.shape[xidx])//calc_downSample-1, random.randint(0,yGT.shape[yidx])//calc_downSample-1
+        sx, sy, ex, ey =  random.randint(5,yGT.shape[xidx])//calc_downSample-5, random.randint(5,yGT.shape[yidx])//calc_downSample-5, random.randint(5,yGT.shape[xidx])//calc_downSample-5, random.randint(5,yGT.shape[yidx])//calc_downSample-5
 
         costMapGT, hmGT = self.do_wavefront(calc_downSample, ex, ey, img, scaleFactor, xidx, yidx, yGT)
         costMapPred, hmPred = self.do_wavefront(calc_downSample, ex, ey, img, scaleFactor, xidx, yidx, ypred)
