@@ -432,12 +432,15 @@ class imageHelper():
         xidx, yidx = 1, 0
 
         #Increase efficency by downsample then upsample
-        _, yGT = self.getTrainEx(img)
+        _, yGT = self.getTrainEx(img,normalize=False)
 
         scaleFactor = plottingUpSample * calc_downSample
 
-
-        sx, sy, ex, ey =  random.randint(5,yGT.shape[xidx])//calc_downSample-5, random.randint(5,yGT.shape[yidx])//calc_downSample-5, random.randint(5,yGT.shape[xidx])//calc_downSample-5, random.randint(5,yGT.shape[yidx])//calc_downSample-5
+        sx, sy = 0, 0
+        ex, ey = 0 ,0
+        while np.linalg.norm(np.array([sx,sy])-np.array([ex,ey]),1) < .25 * yGT.shape[yidx]//calc_downSample:
+            sx, sy = random.randint(5,yGT.shape[xidx]-5)//calc_downSample, random.randint(5,yGT.shape[yidx]-5)//calc_downSample
+            ex, ey = random.randint(5,yGT.shape[xidx]-5)//calc_downSample, random.randint(5,yGT.shape[yidx]-5)//calc_downSample
 
         costMapGT, hmGT = self.do_wavefront(calc_downSample, ex, ey, img, scaleFactor, xidx, yidx, yGT)
         costMapPred, hmPred = self.do_wavefront(calc_downSample, ex, ey, img, scaleFactor, xidx, yidx, ypred)
@@ -472,7 +475,7 @@ class imageHelper():
             both[ypos, xpos + x.shape[xidx] // calc_downSample] = pathColor
             pos = self.gradDesc(xpos, ypos, costMap)
             if weightMap is not None:
-                result = result + weightMap[ypos,xpos]
+                result = result + weightMap[ypos*calc_downSample,xpos*calc_downSample]
 
             name = 'original image left, distance to goal on right for ' + img
 
@@ -633,22 +636,44 @@ class imageHelper():
         cv.imwrite(os.path.join(X_trainDir, imgPart + 'r.' + ext), x)
         np.save(os.path.join(Y_trainDir, img.split('.')[0] + 'r'), y)
 
-    def predictClass(self,img):
-        x, y = self.getImageMaskPair(img)
-        #x = cv.cvtColor(x, cv.COLOR_BGR2RGB)
-        #xp = k.applications.vgg16.preprocess_input(x)
-        ypred = np.squeeze(self.model.predict(np.expand_dims(x, axis=0)))
-        ypred = np.argmax(ypred,axis=2)
+    def predictClass(self,img,imgpath = None):
+        if imgpath is None:
+            x, y = self.getImageMaskPair(img)
 
-        yc = self.getColorForSegMap(y)
-        ypredc = self.getColorForSegMap(ypred)
+            #x = cv.cvtColor(x, cv.COLOR_BGR2RGB)
+            #xp = k.applications.vgg16.preprocess_input(x)
+            ypred = np.squeeze(self.model.predict(np.expand_dims(x, axis=0)))
+            ypred = np.argmax(ypred,axis=2)
+
+            yc = self.getColorForSegMap(y)
+            ypredc = self.getColorForSegMap(ypred)
 
 
-        cv.imshow('x', x)#cv.cvtColor(x, cv.COLOR_RGB2BGR))
-        cv.imshow('y', yc)
-        cv.imshow('ypred', ypredc)
-        cv.waitKey(0)
-        cv.destroyAllWindows()
+            cv.imshow('x', x)#cv.cvtColor(x, cv.COLOR_RGB2BGR))
+            cv.imshow('y', yc)
+            cv.imshow('ypred', ypredc)
+            cv.waitKey(0)
+            cv.destroyAllWindows()
+        else:
+            x = cv.imread(imgpath)
+
+            cx = x.shape[1] // 2
+            cy = x.shape[0] // 2
+
+            x = x[cy-math.floor(self.crop2y / 2):cy + math.ceil(self.crop2y / 2),
+                      cx-math.floor(self.crop2x / 2):cx + math.ceil(self.crop2x / 2)]
+
+            x= cv.resize(x, (int(self.crop2x // self.div), int(self.crop2y // self.div)))
+            ypred = np.squeeze(self.model.predict(np.expand_dims(x, axis=0)))
+            ypred = np.argmax(ypred, axis=2)
+            ypredc = self.getColorForSegMap(ypred)
+
+            cv.imshow('x', x)
+            cv.imshow('ypred', ypredc)
+            cv.waitKey(0)
+            cv.destroyAllWindows()
+
+
 
 
     def predict(self,img,plot = False,destroy = True,outputFolder =None):
@@ -748,7 +773,7 @@ if __name__ == '__main__':
     # x,y = ih.getTrainEx('6615.jpg',normalize=False,blurKsize=5)
     # ih.getWaveFrontCostForMask('6615.jpg',x,y,plottingUpSample=1)
 
-    ih.model = k.models.load_model(os.path.join('models','m13'))
+    ih.model = k.models.load_model(os.path.join('models','m4'))
     #ih.model = k.models.load_model('seg_model.h5')
     #ih.model = k.models.load_model(os.path.join('output','test','seg_model.h5'))
     #print(ih.model.summary())
@@ -761,13 +786,17 @@ if __name__ == '__main__':
     #     ih.predict(img,plot=True)
     #     #ih.predictClass(img)
     #
-    # for img in ih.df.img.values[3:]:
-    #     # x, ypred = ih.predict(img)
+    # for img in ih.df.img.values[7:]:
+    #     x, ypred = ih.predict(img)
     #     # x, ypred = ih.getTrainEx(img)
     #     ih.getWaveFrontCostForMask(img, x, ypred, plottingUpSample=2)
 
+    # ulp = os.path.join('Unlabeled', 'image')
+    # for img in os.listdir(ulp):
+    #     ih.predictClass(None,os.path.join(ulp,img))
+
     modelList = [os.path.join('models','m1'),os.path.join('models','m2'),os.path.join('models','m3'),os.path.join('models','m4')]
-    #modelList = [os.path.join('models','m2'),os.path.join('models','m3'),os.path.join('models','m4')]
+    #modelList = [os.path.join('models','m3'),os.path.join('models','m4')]
     outputFolder = 'PathCompareOut'
     for m in modelList:
         ih.evaluate(m,outputFolder)
