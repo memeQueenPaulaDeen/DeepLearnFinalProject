@@ -711,7 +711,7 @@ class imageHelper():
                 ypred = result
 
 
-            pathCostGT, pathCostPred = ih.getPathCost(img, x, ypred, outputFolder,plottingUpSample=2,calc_downSample=2)
+            pathCostGT, pathCostPred = ih.getPathCost(img, x, ypred, os.path.join(outputFolder,model),plottingUpSample=2,calc_downSample=2)
 
             row = {'img': img,
                    'pathCostGT': pathCostGT,
@@ -719,7 +719,7 @@ class imageHelper():
                    'type': type}
             df = df.append(row, ignore_index=True)
 
-        df.to_csv(os.path.join(outputFolder,'costs.csv'))
+        df.to_csv(os.path.join(os.path.join(outputFolder,model),'costs.csv'))
 
 
 
