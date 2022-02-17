@@ -85,7 +85,7 @@ class SyntheticDataSet(DataSet):
     class_mask_values = [(255, 0, 0),(45, 45, 45),(255, 90, 0),(0, 0, 255),(111, 63, 12),(255, 255, 0)]
 
     navi_classes = ["Obstacle","Paved","Paved","Obstacle","Obstacle","BackGround"]
-    weights = [5000,1,1,5000,5000,50]
+    weights = [400,1,1,400,400,20]
 
 
 
@@ -128,7 +128,7 @@ class SyntheticDataSet(DataSet):
         return self.partion
 
 
-class CategoricalSyntheticGenerator(tf.keras.utils.Sequence):
+class TemplateGenerator(tf.keras.utils.Sequence):
 
 
 
@@ -159,7 +159,73 @@ class CategoricalSyntheticGenerator(tf.keras.utils.Sequence):
         if self.shuffle:
             np.random.shuffle(self.indexes)
 
+    @abstractmethod
+    def generateBatch(self, batch_X : list) -> tuple:
+        raise not NotImplementedError
 
+    def __len__(self):
+        return len(self.X)//self.batchSize
+
+    def __getitem__(self, index):
+
+        batchIdxs = self.indexes[index*self.batchSize:(index+1)*self.batchSize]
+        batch_x = [self.X[i] for i in batchIdxs]
+
+        x , y = self.generateBatch(batch_x)
+
+        return x,y
+
+    def noise(self,x, y, cut):
+        c = int(255 * cut)
+        n1 = np.random.randint(0, 255, self.img_shape)
+        n2 = np.random.randint(0, 255, self.img_shape)
+
+        n1[n1 > c] = 0
+        n2[n2 < 255 - c] = 0
+        x = x + (n1 + n2)
+        x[x > 255] = 255
+        return x, y
+
+    def rotate(self,x, y, angle):
+
+        # if len(y.shape) == 2:
+        #     y = np.expand_dims(y, axis=2)
+
+        angle = int(random.uniform(-angle, angle))
+        h, w = x.shape[:2]
+
+        A = cv.getRotationMatrix2D((int(w / 2), int(h / 2)), angle, 1)
+        x = cv.warpAffine(x, A, (w, h))
+        y = cv.warpAffine(y, A, (w, h))
+
+        return x,y
+
+    def zoom(self,x, y, range):
+        # https://towardsdatascience.com/complete-image-augmentation-in-opencv-31a6b02694f5
+        assert range < 1 and range > 0, 'Value should be less than 1 and greater than 0'
+        range = random.uniform(range, 1)
+
+        # if len(y.shape) == 2:
+        #     y = np.expand_dims(y, axis=2)
+
+        h, w = x.shape[:2]
+        h_taken = int(range * h)
+        w_taken = int(range * w)
+        h_start = random.randint(0, h - h_taken)
+        w_start = random.randint(0, w - w_taken)
+        x = x[h_start:h_start + h_taken, w_start:w_start + w_taken, :]
+        y = y[h_start:h_start + h_taken, w_start:w_start + w_taken, :]
+        x = self.fill(x, h, w)
+        y = self.fill(y, h, w)
+
+        return x, y
+
+    def fill(self,img, h, w):
+        # https://towardsdatascience.com/complete-image-augmentation-in-opencv-31a6b02694f5
+        img = cv.resize(img, (h, w), cv.INTER_CUBIC)
+        return img
+
+class CategoricalSyntheticGenerator(TemplateGenerator):
 
     def generateBatch(self,batch_X):
         x = np.empty((self.batchSize,*self.img_shape))
@@ -223,41 +289,67 @@ class CategoricalSyntheticGenerator(tf.keras.utils.Sequence):
 
         return x, y
 
-    def __len__(self):
-        return len(self.X)//self.batchSize
 
-    def __getitem__(self, index):
+class RegressionSyntheticGenerator(TemplateGenerator):
 
-        batchIdxs = self.indexes[index*self.batchSize:(index+1)*self.batchSize]
-        batch_x = [self.X[i] for i in batchIdxs]
+    def generateBatch(self,batch_X):
+        x = np.empty((self.batchSize,*self.img_shape))
+        y = np.empty((self.batchSize,self.img_shape[0],self.img_shape[1]))
 
-        x , y = self.generateBatch(batch_x)
+        idx = 0
+        for imgFile in batch_X:
 
-        return x,y
+            ix = k.preprocessing.image.load_img(os.path.join(self.x_path, imgFile))
+            ix = k.preprocessing.image.img_to_array(ix)
 
-    def noise(self,x, y, cut):
-        c = int(255 * cut)
-        n1 = np.random.randint(0, 255, self.img_shape)
-        n2 = np.random.randint(0, 255, self.img_shape)
+            iy = k.preprocessing.image.load_img(os.path.join(self.y_path, imgFile))
+            iy = k.preprocessing.image.img_to_array(iy)
 
-        n1[n1 > c] = 0
-        n2[n2 < 255 - c] = 0
-        x = x + (n1 + n2)
-        x[x > 255] = 255
+            if self.aug:
+                ix, iy = self.zoom(ix,iy,.3)
+                ix, iy = self.noise(ix, iy, .035)
+                ix, iy = self.rotate(ix, iy, 10)
+
+            # there is some noise in the unity data so need to infer bad labels
+            # trying to fill by the closest
+
+            foobarMask = None
+            for mask_val in self.dataSet.mask2class_encoding:
+                if foobarMask is None:
+                    foobarMask = np.any(iy[:, :] != mask_val, axis=2)
+                else:
+                    foobarMask = np.logical_and(foobarMask, np.any(iy[:, :] != mask_val, axis=2))
+
+            for mask_val, enc in self.dataSet.mask2class_encoding.items():
+                iy[np.all(iy == mask_val, axis=2)] = enc
+
+            # ideally we need to figure out how to make unity behave not shadding flat??
+            indices = nd.distance_transform_edt(foobarMask, return_distances=False, return_indices=True)
+            iy = iy[tuple(indices)]
+
+            # only need one dimension
+            iy = iy[:, :, 0]
+
+            # there is some noise in the unity data so need to infer bad labels
+            assert len(iy[iy > self.dataSet.num_cat]) == 0, "data quality get rekt"
+
+            #need to avoid concurrent mod
+            iyc =copy.deepcopy(iy)
+            #the encoding scheme should be ordered such that 0 -> first class in class array and weigh w0 corresponds to c0
+            for enc_val in range(len(self.dataSet.weights)):
+                iy[iyc==enc_val] = self.dataSet.weights[enc_val]/max(self.dataSet.weights)
+
+            iy = cv.GaussianBlur(iy, (25,25), 7)
+
+
+            x[idx] = ix
+            y[idx] = iy
+
+
+            idx = idx + 1
+
+
+
+
         return x, y
-
-    def rotate(self,x, y, angle):
-
-        # if len(y.shape) == 2:
-        #     y = np.expand_dims(y, axis=2)
-
-        angle = int(random.uniform(-angle, angle))
-        h, w = x.shape[:2]
-
-        A = cv.getRotationMatrix2D((int(w / 2), int(h / 2)), angle, 1)
-        x = cv.warpAffine(x, A, (w, h))
-        y = cv.warpAffine(y, A, (w, h))
-
-        return x,y
-
 
