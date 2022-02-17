@@ -480,6 +480,7 @@ def getGen(XDir,yDir,batchSize,inputShape,categorical = False):
     #         idx = idx + 1
     #         print(idx)
 
+
     return generator_train(), generator_val(), trainItrPerEpoch, valItrPerEpoch
 
 

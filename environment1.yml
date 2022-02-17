@@ -6,7 +6,7 @@ channels:
 dependencies:
   #- cudnn==8.0.5.39=h36d860d_1 #works but hella slow
   #- cudnn==8.0.5.39=h37a4af2_1 #works but hella slow
-  - cudnn==8.0.5.39=hfe7f257_1
+  #- cudnn==8.0.5.39=hfe7f257_1
   - cudatoolkit
   - cudnn
   - pip
@@ -17,7 +17,7 @@ dependencies:
     - kiwisolver
     - matplotlib
     - numpy
-    - opencv-python
+    - opencv-contrib-python
     - pandas
     - scipy
     - tensorboard
@@ -29,4 +29,5 @@ dependencies:
     - pydot
     - nltk
     - scikit-image
-
+    - shapely
+    - networkx

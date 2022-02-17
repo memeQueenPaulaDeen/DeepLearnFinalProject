@@ -792,17 +792,17 @@ if __name__ == '__main__':
     #     ih.predict(img,plot=True)
     #     #ih.predictClass(img)
     #
-    # for img in ih.df.img.values[7:]:
-    #     x, ypred = ih.predict(img)
-    #     # x, ypred = ih.getTrainEx(img)
-    #     ih.getWaveFrontCostForMask(img, x, ypred, plottingUpSample=2)
+    for img in ih.df.img.values[7:]:
+        x, ypred = ih.predict(img)
+        # x, ypred = ih.getTrainEx(img)
+        ih.getWaveFrontCostForMask(img, x, ypred, plottingUpSample=2)
 
     # ulp = os.path.join('Unlabeled', 'image')
     # for img in os.listdir(ulp):
     #     ih.predictClass(None,os.path.join(ulp,img))
 
-    modelList = [os.path.join('models','m1'),os.path.join('models','m2'),os.path.join('models','m3'),os.path.join('models','m4')]
-    #modelList = [os.path.join('models','m3'),os.path.join('models','m4')]
-    outputFolder = 'PathCompareOut'
-    for m in modelList:
-        ih.evaluate(m,outputFolder)
+    # modelList = [os.path.join('models','m1'),os.path.join('models','m2'),os.path.join('models','m3'),os.path.join('models','m4')]
+    # #modelList = [os.path.join('models','m3'),os.path.join('models','m4')]
+    # outputFolder = 'PathCompareOut'
+    # for m in modelList:
+    #     ih.evaluate(m,outputFolder)

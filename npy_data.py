@@ -11,7 +11,7 @@ def save_names(in_dir, exten_type, out_dir):
     for file in os.listdir(in_dir):
         file_names.append(file[:exten_len])
     print('Num Files: ', len(file_names))
-    np.save(out_dir+'/npy/file_names.npy', np.array(file_names))
+    np.save(os.path.join(out_dir,'npy','file_names.npy'), np.array(file_names))
 
 def make_data(x_dir, y_dir, out_dir, out_names, params):
     x_name, y_name = out_names 
@@ -95,9 +95,9 @@ def make_data(x_dir, y_dir, out_dir, out_names, params):
 
 #######################################################################################
 
-x_dir = './train/X_Train_OG_256'
-y_dir = './train/Y_Train_OG_256'
-out_dir = './train'
+x_dir = os.path.join('X_Train_OG_256','data')
+y_dir = 'Y_Train_OG_256'
+out_dir = 'trainSUM'
 
 num_classes = 10
 weight = False
@@ -111,5 +111,5 @@ params = (num_classes, weight, blur_y, norm_x, norm_y, aug, cat)
 out_names = ('x_nwbbnxnyac', 'y_nwbbnxnyac')
 
 
-#save_names(x_dir, 'jpg', out_dir)
+save_names(x_dir, 'jpg', out_dir)
 make_data(x_dir, y_dir, out_dir, out_names, params)
