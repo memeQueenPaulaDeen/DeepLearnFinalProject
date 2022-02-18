@@ -242,6 +242,7 @@ class CategoricalSyntheticGenerator(TemplateGenerator):
             iy = k.preprocessing.image.img_to_array(iy)
 
             if self.aug:
+                ix, iy = self.zoom(ix, iy, .3)
                 ix,iy = self.noise(ix,iy,.035)
                 ix,iy = self.rotate(ix,iy,10)
 

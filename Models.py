@@ -5,7 +5,103 @@ from tensorflow.keras.layers import LeakyReLU, Conv2DTranspose, BatchNormalizati
 
 import tensorflow as tf
 physical_devices = tf.config.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
+for physical_device in physical_devices:
+    tf.config.experimental.set_memory_growth(physical_device, True)
+
+
+
+class Deep_Lab_V3():
+
+    #def __init__(self,input_shape,num_classes,batchSize,isCategorical,doBatchNorm,hiddenDecoderActivation,outputActivation):
+    def __init__(self,input_shape,num_classes,outputActivation):
+        self.input_shape=input_shape
+        self.num_classes = num_classes
+        #self.isCategorical = isCategorical
+        #self.doBatchNorm = doBatchNorm
+        # self.hiddenDecoderActivation=hiddenDecoderActivation
+        self.outputActivation = outputActivation
+        #self.batchSize = batchSize
+        # self.generator = generator
+
+        self.model = self.gen_model()
+
+    def activation(self, x, _type):
+        if _type.lower() == 'leaky':
+            return LeakyReLU(.1)(x)
+        elif _type.lower() == 'relu':
+            return k.layers.ReLU()(x)
+        elif _type.lower() == 'max_relu':
+            return k.layers.ReLU(max_value=1.0)(x)
+        elif _type.lower() == 'softmax':
+            return k.layers.Softmax()(x)
+        else:
+            assert False, "specified activation does not exist or was not implemented"
+
+    def convolution_block(
+            self,
+            block_input,
+            num_filters=256,
+            kernel_size=3,
+            dilation_rate=1,
+            padding="same",
+            use_bias=False,
+    ):
+        x = k.layers.Conv2D(
+            num_filters,
+            kernel_size=kernel_size,
+            dilation_rate=dilation_rate,
+            padding="same",
+            use_bias=use_bias,
+            kernel_initializer=k.initializers.HeNormal(),
+        )(block_input)
+        x = k.layers.BatchNormalization()(x)
+        return tf.nn.relu(x)
+
+    def DilatedSpatialPyramidPooling(self,dspp_input):
+        dims = dspp_input.shape
+        x = k.layers.AveragePooling2D(pool_size=(dims[-3], dims[-2]))(dspp_input)
+        x = self.convolution_block(x, kernel_size=1, use_bias=True)
+        out_pool = k.layers.UpSampling2D(
+            size=(dims[-3] // x.shape[1], dims[-2] // x.shape[2]), interpolation="bilinear",
+        )(x)
+
+        out_1 = self.convolution_block(dspp_input, kernel_size=1, dilation_rate=1)
+        out_6 = self.convolution_block(dspp_input, kernel_size=3, dilation_rate=6)
+        out_12 = self.convolution_block(dspp_input, kernel_size=3, dilation_rate=12)
+        out_18 = self.convolution_block(dspp_input, kernel_size=3, dilation_rate=18)
+
+        x = k.layers.Concatenate(axis=-1)([out_pool, out_1, out_6, out_12, out_18])
+        output = self.convolution_block(x, kernel_size=1)
+        return output
+
+    def gen_model(self):
+        model_input = k.Input(shape=self.input_shape)
+        resnet50 = k.applications.ResNet50(
+            weights="imagenet", include_top=False, input_tensor=model_input
+        )
+        x = resnet50.get_layer("conv4_block6_2_relu").output
+        x = self.DilatedSpatialPyramidPooling(x)
+
+        input_a = k.layers.UpSampling2D(
+            size=(self.input_shape[0] // 4 // x.shape[1], self.input_shape[1] // 4 // x.shape[2]),
+            interpolation="bilinear",
+        )(x)
+        input_b = resnet50.get_layer("conv2_block3_2_relu").output
+        input_b = self.convolution_block(input_b, num_filters=48, kernel_size=1)
+
+        x = k.layers.Concatenate(axis=-1)([input_a, input_b])
+        x = self.convolution_block(x)
+        x = self.convolution_block(x)
+        x = k.layers.UpSampling2D(
+            size=(self.input_shape[0] // x.shape[1], self.input_shape[1] // x.shape[2]),
+            interpolation="bilinear",
+        )(x)
+        model_output = k.layers.Conv2D(self.num_classes, kernel_size=(1, 1), padding="same")(x)
+        model_output = self.activation(model_output,self.outputActivation)
+        return k.Model(inputs=model_input, outputs=model_output)
+
+
 
 class VGG_UNET():
 

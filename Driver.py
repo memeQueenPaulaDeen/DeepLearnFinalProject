@@ -30,18 +30,92 @@ def visulizeGenReg(gen,d):
         cv.waitKey(0)
 
 
-def trainCatVGG(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,outPutFolderPath,modelSaveFolderName,checkPointOutPutFolderPath):
+def trainCatDeepLab(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,outPutFolderPath,modelSaveFolderName,checkPointOutPutFolderPath,restoreFromCp = False):
+
+    if restoreFromCp:
+        model = k.models.load_model(checkPointOutPutFolderPath)
+    else:
+        DeepLabMod = Models.Deep_Lab_V3(img_shape,num_cat,outputActivation="softmax")
+
+        model = DeepLabMod.model
+        optimizer = k.optimizers.Adam(learning_rate=1e-4)
+        loss = k.losses.CategoricalCrossentropy()
+        model.compile(loss=loss, optimizer=optimizer, metrics=['accuracy'], )
+        print(model.summary())
+        k.utils.plot_model(model, os.path.join(outPutFolderPath, modelSaveFolderName + ".png"), show_shapes=True)
+
+    es = k.callbacks.EarlyStopping(monitor='val_loss', restore_best_weights=True, patience=7)
+    rlronp = k.callbacks.ReduceLROnPlateau(monitor='loss', factor=.5, patience=3)
+    cp = k.callbacks.ModelCheckpoint(filepath=checkPointOutPutFolderPath, verbose=0, monitor="val_loss",
+                                     save_best_only=True, save_weights_only=False, mode="auto", save_freq="epoch", )
+    cbs = [es, rlronp, cp]
 
 
-    vggMod = Models.VGG_UNET(img_shape, num_cat, batchSize, isCategorical=True, doBatchNorm=False,
-                             hiddenDecoderActivation="relu", outputActivation="softmax")
 
-    model = vggMod.model
-    optimizer = k.optimizers.Adam(learning_rate=1e-4)
-    loss = k.losses.CategoricalCrossentropy()
-    model.compile(loss=loss, optimizer=optimizer, metrics=['accuracy'], )
-    print(model.summary())
-    k.utils.plot_model(model, os.path.join(outPutFolderPath, modelSaveFolderName + ".png"), show_shapes=True)
+    history = model.fit(trainGen,
+                               epochs=max_epoch,
+                               batch_size=batchSize,
+                               validation_data=valGen,
+                               shuffle=True,
+                               callbacks=cbs,
+                               workers=16,
+                               max_queue_size=64,
+                               validation_freq=1,
+                               )
+
+    return model, history
+
+
+def trainRegDeepLab(trainGen, valGen, batchSize, img_shape, max_epoch, outPutFolderPath, modelSaveFolderName,
+                checkPointOutPutFolderPath,restoreFromCp = False):
+
+    if restoreFromCp:
+        model = k.models.load_model(checkPointOutPutFolderPath)
+    else:
+        DeepLabMod = Models.Deep_Lab_V3(img_shape, num_classes=1,outputActivation="max_relu")
+
+        model = DeepLabMod.model
+        optimizer = k.optimizers.Adam(learning_rate=1e-4)
+        loss = k.losses.MeanAbsoluteError()
+        model.compile(loss=loss, optimizer=optimizer, metrics=['mean_absolute_percentage_error'], )
+        print(model.summary())
+        k.utils.plot_model(model, os.path.join(outPutFolderPath, modelSaveFolderName + ".png"), show_shapes=True)
+
+    es = k.callbacks.EarlyStopping(monitor='val_loss', restore_best_weights=True, patience=7)
+    rlronp = k.callbacks.ReduceLROnPlateau(monitor='loss', factor=.5, patience=3)
+    cp = k.callbacks.ModelCheckpoint(filepath=checkPointOutPutFolderPath, verbose=0, monitor="val_loss",
+                                     save_best_only=True, save_weights_only=False, mode="auto", save_freq="epoch", )
+    cbs = [es, rlronp, cp]
+
+    history = model.fit(trainGen,
+                        epochs=max_epoch,
+                        batch_size=batchSize,
+                        validation_data=valGen,
+                        shuffle=True,
+                        callbacks=cbs,
+                        workers=16,
+                        max_queue_size=64,
+                        validation_freq=1,
+                        )
+
+    return model, history
+
+
+
+def trainCatVGG(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,outPutFolderPath,modelSaveFolderName,checkPointOutPutFolderPath,restoreFromCp = False):
+
+    if restoreFromCp:
+        model = k.models.load_model(checkPointOutPutFolderPath)
+    else:
+        vggMod = Models.VGG_UNET(img_shape, num_cat, batchSize, isCategorical=True, doBatchNorm=False,
+                                 hiddenDecoderActivation="relu", outputActivation="softmax")
+
+        model = vggMod.model
+        optimizer = k.optimizers.Adam(learning_rate=1e-4)
+        loss = k.losses.CategoricalCrossentropy()
+        model.compile(loss=loss, optimizer=optimizer, metrics=['accuracy'], )
+        print(model.summary())
+        k.utils.plot_model(model, os.path.join(outPutFolderPath, modelSaveFolderName + ".png"), show_shapes=True)
 
     es = k.callbacks.EarlyStopping(monitor='val_loss', restore_best_weights=True, patience=7)
     rlronp = k.callbacks.ReduceLROnPlateau(monitor='loss', factor=.5, patience=3)
@@ -64,17 +138,20 @@ def trainCatVGG(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,outPutFold
 
 
 def trainRegVGG(trainGen, valGen, batchSize, img_shape, max_epoch, outPutFolderPath, modelSaveFolderName,
-                checkPointOutPutFolderPath):
+                checkPointOutPutFolderPath,restoreFromCp = False):
 
-    vggMod = Models.VGG_UNET(img_shape, num_classes=1, batchSize=batchSize, isCategorical=True, doBatchNorm=True,
-                             hiddenDecoderActivation="relu", outputActivation="max_relu")
+    if restoreFromCp:
+        model = k.models.load_model(checkPointOutPutFolderPath)
+    else:
+        vggMod = Models.VGG_UNET(img_shape, num_classes=1, batchSize=batchSize, isCategorical=True, doBatchNorm=True,
+                                 hiddenDecoderActivation="relu", outputActivation="max_relu")
 
-    model = vggMod.model
-    optimizer = k.optimizers.Adam(learning_rate=1e-4)
-    loss = k.losses.MeanAbsoluteError()
-    model.compile(loss=loss, optimizer=optimizer, metrics=['mean_absolute_percentage_error'], )
-    print(model.summary())
-    k.utils.plot_model(model, os.path.join(outPutFolderPath, modelSaveFolderName + ".png"), show_shapes=True)
+        model = vggMod.model
+        optimizer = k.optimizers.Adam(learning_rate=1e-4)
+        loss = k.losses.MeanAbsoluteError()
+        model.compile(loss=loss, optimizer=optimizer, metrics=['mean_absolute_percentage_error'], )
+        print(model.summary())
+        k.utils.plot_model(model, os.path.join(outPutFolderPath, modelSaveFolderName + ".png"), show_shapes=True)
 
     es = k.callbacks.EarlyStopping(monitor='val_loss', restore_best_weights=True, patience=7)
     rlronp = k.callbacks.ReduceLROnPlateau(monitor='loss', factor=.5, patience=3)
@@ -122,7 +199,12 @@ if __name__ == "__main__":
     # k.set_session(session)
 
 
-    modelSaveFolderName = "Synthetic_Dataset_VGG_REG_1"
+    #modelSaveFolderName = "Synthetic_Dataset_DEEPLAB_CAT_1"
+    modelSaveFolderName = "Synthetic_Dataset_DEEPLAB_REG_1"
+
+    #modelSaveFolderName = "Synthetic_Dataset_VGG_CAT_3"
+    #modelSaveFolderName = "Synthetic_Dataset_VGG_REG_1"
+
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
     outPutFolderPath = os.path.join(pwd,"thesisModels",modelSaveFolderName)
     Path(outPutFolderPath).mkdir(parents=True, exist_ok=True)
@@ -131,6 +213,8 @@ if __name__ == "__main__":
     Path(checkPointOutPutFolderPath).mkdir(parents=True, exist_ok=True)
 
     folderPath = os.path.join("E:","UnitySegOutPut","generatedData1")
+    #folderPath = os.path.join("/home", "samiw", "thesis", "data", "UnitySegOutPut","generatedDataCOPY")
+
     img_shape = (480,480,3)
     num_cat = 6
     batchSize = 4
@@ -139,12 +223,37 @@ if __name__ == "__main__":
 
     dataset = Generators.SyntheticDataSet(folderPath,"x","y",img_shape,num_cat)
 
+##################################################################
+    ###################Model Training##########################
+####################################################################
+
     ############### train the categorical VGG model##############
     # trainGen = Generators.CategoricalSyntheticGenerator(dataset, "train", batchSize=batchSize)
     # valGen = Generators.CategoricalSyntheticGenerator(dataset, "val", batchSize=batchSize)
     # testGen = Generators.CategoricalSyntheticGenerator(dataset, "test", batchSize=batchSize)
     # #visulizeGenCat(trainGen, dataset)
     # model, history = trainCatVGG(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,
+    #                              outPutFolderPath,modelSaveFolderName,checkPointOutPutFolderPath,
+    #                              restoreFromCp=True)
+
+
+    ############ train the regression VGG model#####################
+
+    # trainGen = Generators.RegressionSyntheticGenerator(dataset, "train", batchSize=batchSize)
+    # valGen = Generators.RegressionSyntheticGenerator(dataset, "val", batchSize=batchSize)
+    # testGen = Generators.RegressionSyntheticGenerator(dataset, "test", batchSize=batchSize)
+    # #visulizeGenReg(trainGen, dataset)
+    # model, history = trainRegVGG(trainGen, valGen, batchSize, img_shape, max_epoch,
+    #                              outPutFolderPath, modelSaveFolderName, checkPointOutPutFolderPath,
+    #                              restoreFromCp=True)
+
+
+    ############### train the categorical Deep Lab model##############
+    # trainGen = Generators.CategoricalSyntheticGenerator(dataset, "train", batchSize=batchSize)
+    # valGen = Generators.CategoricalSyntheticGenerator(dataset, "val", batchSize=batchSize)
+    # testGen = Generators.CategoricalSyntheticGenerator(dataset, "test", batchSize=batchSize)
+    # #visulizeGenCat(trainGen, dataset)
+    # model, history = trainCatDeepLab(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,
     #                              outPutFolderPath,modelSaveFolderName,checkPointOutPutFolderPath)
 
 
@@ -154,10 +263,13 @@ if __name__ == "__main__":
     valGen = Generators.RegressionSyntheticGenerator(dataset, "val", batchSize=batchSize)
     testGen = Generators.RegressionSyntheticGenerator(dataset, "test", batchSize=batchSize)
     #visulizeGenReg(trainGen, dataset)
-    model, history = trainRegVGG(trainGen, valGen, batchSize, img_shape, max_epoch,
-                                 outPutFolderPath, modelSaveFolderName, checkPointOutPutFolderPath)
+    model, history = trainRegDeepLab(trainGen, valGen, batchSize, img_shape, max_epoch,
+                                 outPutFolderPath, modelSaveFolderName, checkPointOutPutFolderPath,
+                                 restoreFromCp=False)
 
-
+######################################################################
+    #################end Model train##########################
+####################################################################
 
     ############ save the final model and history##################
     modelLoc = os.path.join(outPutFolderPath, 'model')
@@ -190,3 +302,24 @@ if __name__ == "__main__":
     #     cv.imshow("x",x.astype(np.uint8))
     #     cv.imshow("y",cv.cvtColor(y.astype(np.uint8),cv.COLOR_RGB2BGR))
     #     cv.waitKey(0)
+
+
+    ########### visuilize prediction on test data set ##########
+    # model = k.models.load_model(modelLoc)
+    # predDir = os.path.join(folderPath, "x")
+    # test = dataset.getPartition(.15, .15)['test']
+    # for img in os.listdir(predDir):
+    #     if img in test:
+    #         toPred = os.path.join(predDir, img)
+    #         x = cv.imread(toPred)
+    #         x = cv.resize(x, model.input.shape[-3:-1])
+    #         x = np.expand_dims(x, axis=0)
+    #         y = model.predict(x)
+    #
+    #         x = np.squeeze(x)
+    #         y = np.squeeze(y)
+    #
+    #         y = dataset.decodeImg2Mask(y)
+    #         cv.imshow("x", x.astype(np.uint8))
+    #         cv.imshow("y", cv.cvtColor(y.astype(np.uint8), cv.COLOR_RGB2BGR))
+    #         cv.waitKey(0)
