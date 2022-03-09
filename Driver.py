@@ -1,3 +1,5 @@
+import threading
+import time
 
 
 def visulizeGenCat(gen,d):
@@ -6,7 +8,7 @@ def visulizeGenCat(gen,d):
         Xs, Ys = gen.__getitem__(i)
         x = Xs[0]
         y = Ys[0]
-        y = d.decodeImg2Mask(y)
+        y = d.decodeOneHot2Mask(y)
         x = x.astype(np.uint8)
         x = cv.cvtColor(x, cv.COLOR_BGR2RGB)
         y = cv.cvtColor(y, cv.COLOR_BGR2RGB)
@@ -173,12 +175,249 @@ def trainRegVGG(trainGen, valGen, batchSize, img_shape, max_epoch, outPutFolderP
     return model, history
 
 
+def getSyntheticTrainedModelNames(modelArch : str,categorical : bool,
+                                  vggCatDefault = "Synthetic_Dataset_VGG_CAT_3",
+                                  vggRegDefault = "Synthetic_Dataset_VGG_REG_1",
+                                  deepLabCatDefault = "Synthetic_Dataset_DEEPLAB_CAT_1",
+                                  deepLabRegDefault = "Synthetic_Dataset_DEEPLAB_REG_1"):
+    modelArch = modelArch.lower()
+
+    assert modelArch == 'vgg' or modelArch == 'deeplab', \
+        'only vgg and deep lab are implemnted check args or add implemtation, Recived ' + modelArch + " for model arc"
+
+    if modelArch == 'vgg':
+        if categorical:
+            modelSaveFolderName = vggCatDefault
+
+        else:  # it is regression
+            modelSaveFolderName = vggRegDefault
+    elif modelArch == 'deeplab':
+        if categorical:
+            modelSaveFolderName = deepLabCatDefault
+        else:  # it is regression
+            modelSaveFolderName = deepLabRegDefault
+
+    return modelSaveFolderName
+
+def runTrainMode(modelArch, categorical,modelSaveFolderName,dataFolder,restoreFromCp=False):
+
+
+
+
+
+
+    pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
+    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    Path(outPutFolderPath).mkdir(parents=True, exist_ok=True)
+
+    checkPointOutPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName, modelSaveFolderName + "CP")
+    Path(checkPointOutPutFolderPath).mkdir(parents=True, exist_ok=True)
+
+
+    img_shape = (480, 480, 3)
+    num_cat = 6
+    batchSize = 4
+    max_epoch = 150
+
+    dataset = Generators.SyntheticDataSet(dataFolder, "x", "y", img_shape, num_cat)
+
+    ##################################################################
+    ###################Model Training##########################
+    ####################################################################
+    if modelArch == 'vgg':
+        if categorical:
+            ############## train the categorical VGG model##############
+            trainGen = Generators.CategoricalSyntheticGenerator(dataset, "train", batchSize=batchSize)
+            valGen = Generators.CategoricalSyntheticGenerator(dataset, "val", batchSize=batchSize)
+            testGen = Generators.CategoricalSyntheticGenerator(dataset, "test", batchSize=batchSize)
+            #visulizeGenCat(trainGen, dataset)
+            model, history = trainCatVGG(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,
+                                         outPutFolderPath,modelSaveFolderName,checkPointOutPutFolderPath,
+                                         restoreFromCp=restoreFromCp)
+
+        ########### train the regression VGG model#####################
+        else:
+            trainGen = Generators.RegressionSyntheticGenerator(dataset, "train", batchSize=batchSize)
+            valGen = Generators.RegressionSyntheticGenerator(dataset, "val", batchSize=batchSize)
+            testGen = Generators.RegressionSyntheticGenerator(dataset, "test", batchSize=batchSize)
+            visulizeGenReg(trainGen, dataset)
+            model, history = trainRegVGG(trainGen, valGen, batchSize, img_shape, max_epoch,
+                                         outPutFolderPath, modelSaveFolderName, checkPointOutPutFolderPath,
+                                         restoreFromCp=restoreFromCp)
+
+    elif modelArch == 'deeplab':
+        if categorical:
+            ############## train the categorical Deep Lab model##############
+            trainGen = Generators.CategoricalSyntheticGenerator(dataset, "train", batchSize=batchSize)
+            valGen = Generators.CategoricalSyntheticGenerator(dataset, "val", batchSize=batchSize)
+            testGen = Generators.CategoricalSyntheticGenerator(dataset, "test", batchSize=batchSize)
+            #visulizeGenCat(trainGen, dataset)
+            model, history = trainCatDeepLab(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,
+                                         outPutFolderPath,modelSaveFolderName,checkPointOutPutFolderPath,
+                                             restoreFromCp=restoreFromCp)
+
+        else:
+            ############ train the regression DeepLab model#####################
+
+            trainGen = Generators.RegressionSyntheticGenerator(dataset, "train", batchSize=batchSize)
+            valGen = Generators.RegressionSyntheticGenerator(dataset, "val", batchSize=batchSize)
+            testGen = Generators.RegressionSyntheticGenerator(dataset, "test", batchSize=batchSize)
+            visulizeGenReg(trainGen, dataset)
+            model, history = trainRegDeepLab(trainGen, valGen, batchSize, img_shape, max_epoch,
+                                         outPutFolderPath, modelSaveFolderName, checkPointOutPutFolderPath,
+                                         restoreFromCp=restoreFromCp)
+
+    ######################################################################
+    #################end Model train##########################
+    ####################################################################
+
+    ############ save the final model and history##################
+    modelLoc = os.path.join(outPutFolderPath, 'model')
+    Path(modelLoc).mkdir(parents=True, exist_ok=True)
+
+    histLoc = os.path.join(outPutFolderPath, 'history')
+    Path(histLoc).mkdir(parents=True, exist_ok=True)
+
+    model.save(modelLoc)
+    pickle.dump(history.history, open(os.path.join(histLoc, 'historym.pkl'), 'wb'))
+
+
+def visModelOutForFloodNet(modelSaveFolderName,categorical):
+
+
+    ############# visuilize prediction on the FloodNet dataset#########
+
+    img_shape = (480, 480, 3)
+    num_cat = 6
+    dataset = Generators.SyntheticDataSet(None, None, None, img_shape, num_cat)
+
+    pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
+    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    modelLoc = os.path.join(outPutFolderPath, 'model')
+    model = k.models.load_model(modelLoc)
+    predDir = os.path.join(pwd,"X_Train","data")
+    for img in os.listdir(predDir):
+        toPred = os.path.join(predDir,img)
+
+        ix = k.preprocessing.image.load_img(toPred)
+        x = k.preprocessing.image.img_to_array(ix)
+
+
+        x = cv.resize(x,model.input.shape[-3:-1])
+        x = np.expand_dims(x,axis=0)
+        y = model.predict(x)
+
+        x = np.squeeze(x)
+        y = np.squeeze(y)
+        if categorical:
+            y = dataset.decodeOneHot2Mask(y)
+            cv.imshow("y",cv.cvtColor(y.astype(np.uint8),cv.COLOR_RGB2BGR))
+        else:
+            y = dataset.scaleNormedCostMapForPlot(y)
+            y = cv.applyColorMap(y.astype('uint8'), cv.COLORMAP_HOT)
+            cv.imshow("y", y.astype(np.uint8))
+
+        cv.imshow("x", cv.cvtColor(x.astype(np.uint8), cv.COLOR_RGB2BGR))
+        cv.waitKey(0)
+
+def visModelOutForSynthData(modelSaveFolderName,dataFolder,categorical):
+
+
+    ########### visuilize prediction on test data set ##########
+    img_shape = (480, 480, 3)
+    num_cat = 6
+    dataset = Generators.SyntheticDataSet(dataFolder, "x", "y", img_shape, num_cat)
+
+    pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
+    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    modelLoc = os.path.join(outPutFolderPath, 'model')
+
+    model = k.models.load_model(modelLoc)
+    predDir = os.path.join(dataFolder, "x")
+    test = dataset.getPartition(.15, .15)['test']
+    for img in os.listdir(predDir):
+        if img in test:
+            toPred = os.path.join(predDir, img)
+            ix = k.preprocessing.image.load_img(toPred)
+            x = k.preprocessing.image.img_to_array(ix)
+            x = cv.resize(x, model.input.shape[-3:-1])
+            x = np.expand_dims(x, axis=0)
+            y = model.predict(x)
+
+            x = np.squeeze(x)
+            y = np.squeeze(y)
+
+            if categorical:
+                y = dataset.decodeOneHot2Mask(y)
+                cv.imshow("y", cv.cvtColor(y.astype(np.uint8), cv.COLOR_RGB2BGR))
+            else:
+                y = dataset.scaleNormedCostMapForPlot(y)
+                y = cv.applyColorMap(y.astype('uint8'), cv.COLORMAP_HOT)
+                cv.imshow("y", y.astype(np.uint8))
+
+            cv.imshow("x", cv.cvtColor(x.astype(np.uint8), cv.COLOR_RGB2BGR))
+            cv.waitKey(0)
+
+def runTestMode(categorical,modelSaveFolderName):
+    folderPath = os.path.join("E:", "UnitySegOutPut", "testSenario")
+
+    # folderPath = os.path.join("/home", "samiw", "thesis", "data", "UnitySegOutPut","generatedDataCOPY")
+
+    img_shape = (480, 480, 3)
+    num_cat = 6
+    batchSize = 4
+    max_epoch = 150
+
+    dataset = Generators.SyntheticDataSet(folderPath, "x", "y", img_shape, num_cat)
+
+    pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
+    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    modelLoc = os.path.join(outPutFolderPath, 'model')
+    model = k.models.load_model(modelLoc)
+    predDir = os.path.join(folderPath, "x")
+    # test = dataset.getPartition(.15, .15)['test']
+    for img in os.listdir(predDir):
+        # if img in test:
+        toPred = os.path.join(predDir, img)
+
+        ix = k.preprocessing.image.load_img(toPred)
+        x = k.preprocessing.image.img_to_array(ix)
+
+        x = cv.resize(x, model.input.shape[-3:-1])
+        x = np.expand_dims(x, axis=0)
+        y = model.predict(x)
+
+        x = np.squeeze(x)
+        y = np.squeeze(y)
+
+        if categorical:
+            yh = dataset.costMapFromEncoded(np.argmax(y, axis=2).astype(np.float32))
+            with open(os.path.join(folderPath, "pred_raw", img[:-4] + '.npy'), 'wb') as f:
+                np.save(f, dataset.scaleNormedCostMap(yh))
+            yh = dataset.scaleNormedCostMapForPlot(yh)
+            yh = cv.applyColorMap(yh.astype('uint8'), cv.COLORMAP_HOT)
+            cv.imshow("yh", yh.astype(np.uint8))
+            y = dataset.decodeOneHot2Mask(y)
+            cv.imshow("y", cv.cvtColor(y.astype(np.uint8), cv.COLOR_RGB2BGR))
+            cv.imwrite(os.path.join(folderPath, "pred_img", img), yh)
+        else:
+            y = dataset.scaleNormedCostMapForPlot(y)
+            y = cv.applyColorMap(y.astype('uint8'), cv.COLORMAP_HOT)
+            cv.imshow("y", y.astype(np.uint8))
+
+        cv.imshow("x", cv.cvtColor(x, cv.COLOR_RGB2BGR).astype(np.uint8))
+        cv.waitKey(1)
+
+
 if __name__ == "__main__":
     import os
     import sys
 
     import Generators
     import Models
+    import UnityServer
+    import scratch
+
     import cv2 as cv
     import numpy as np
     from tensorflow import keras as k
@@ -198,128 +437,67 @@ if __name__ == "__main__":
     # session = tf.Session(config=)
     # k.set_session(session)
 
+    modelArch = 'deeplab'
+    categorical = True
 
-    #modelSaveFolderName = "Synthetic_Dataset_DEEPLAB_CAT_1"
-    modelSaveFolderName = "Synthetic_Dataset_DEEPLAB_REG_1"
+    modelSaveFolderName = getSyntheticTrainedModelNames(modelArch, categorical)
 
-    #modelSaveFolderName = "Synthetic_Dataset_VGG_CAT_3"
-    #modelSaveFolderName = "Synthetic_Dataset_VGG_REG_1"
+    ############################################################################
+    ##############################RUN IN TRAINING MODE##########################
 
-    pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
-    outPutFolderPath = os.path.join(pwd,"thesisModels",modelSaveFolderName)
-    Path(outPutFolderPath).mkdir(parents=True, exist_ok=True)
-
-    checkPointOutPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName,modelSaveFolderName+"CP")
-    Path(checkPointOutPutFolderPath).mkdir(parents=True, exist_ok=True)
-
-    folderPath = os.path.join("E:","UnitySegOutPut","generatedData1")
-    #folderPath = os.path.join("/home", "samiw", "thesis", "data", "UnitySegOutPut","generatedDataCOPY")
-
-    img_shape = (480,480,3)
-    num_cat = 6
-    batchSize = 4
-    max_epoch = 150
-
-
-    dataset = Generators.SyntheticDataSet(folderPath,"x","y",img_shape,num_cat)
-
-##################################################################
-    ###################Model Training##########################
-####################################################################
-
-    ############### train the categorical VGG model##############
-    # trainGen = Generators.CategoricalSyntheticGenerator(dataset, "train", batchSize=batchSize)
-    # valGen = Generators.CategoricalSyntheticGenerator(dataset, "val", batchSize=batchSize)
-    # testGen = Generators.CategoricalSyntheticGenerator(dataset, "test", batchSize=batchSize)
-    # #visulizeGenCat(trainGen, dataset)
-    # model, history = trainCatVGG(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,
-    #                              outPutFolderPath,modelSaveFolderName,checkPointOutPutFolderPath,
-    #                              restoreFromCp=True)
-
-
-    ############ train the regression VGG model#####################
-
-    # trainGen = Generators.RegressionSyntheticGenerator(dataset, "train", batchSize=batchSize)
-    # valGen = Generators.RegressionSyntheticGenerator(dataset, "val", batchSize=batchSize)
-    # testGen = Generators.RegressionSyntheticGenerator(dataset, "test", batchSize=batchSize)
-    # #visulizeGenReg(trainGen, dataset)
-    # model, history = trainRegVGG(trainGen, valGen, batchSize, img_shape, max_epoch,
-    #                              outPutFolderPath, modelSaveFolderName, checkPointOutPutFolderPath,
-    #                              restoreFromCp=True)
-
-
-    ############### train the categorical Deep Lab model##############
-    # trainGen = Generators.CategoricalSyntheticGenerator(dataset, "train", batchSize=batchSize)
-    # valGen = Generators.CategoricalSyntheticGenerator(dataset, "val", batchSize=batchSize)
-    # testGen = Generators.CategoricalSyntheticGenerator(dataset, "test", batchSize=batchSize)
-    # #visulizeGenCat(trainGen, dataset)
-    # model, history = trainCatDeepLab(trainGen,valGen,batchSize,img_shape,num_cat,max_epoch,
-    #                              outPutFolderPath,modelSaveFolderName,checkPointOutPutFolderPath)
-
-
-    ############ train the regression VGG model#####################
-
-    trainGen = Generators.RegressionSyntheticGenerator(dataset, "train", batchSize=batchSize)
-    valGen = Generators.RegressionSyntheticGenerator(dataset, "val", batchSize=batchSize)
-    testGen = Generators.RegressionSyntheticGenerator(dataset, "test", batchSize=batchSize)
-    #visulizeGenReg(trainGen, dataset)
-    model, history = trainRegDeepLab(trainGen, valGen, batchSize, img_shape, max_epoch,
-                                 outPutFolderPath, modelSaveFolderName, checkPointOutPutFolderPath,
-                                 restoreFromCp=False)
-
-######################################################################
-    #################end Model train##########################
-####################################################################
-
-    ############ save the final model and history##################
-    modelLoc = os.path.join(outPutFolderPath, 'model')
-    Path(modelLoc).mkdir(parents=True, exist_ok=True)
-
-    histLoc = os.path.join(outPutFolderPath, 'history')
-    Path(histLoc).mkdir(parents=True, exist_ok=True)
-
-    model.save(modelLoc)
-    pickle.dump(history.history, open(os.path.join(histLoc, 'historym.pkl'), 'wb'))
-
-
-
-
-    ############# visuilize prediction on the drone deploy dataset#########
-
-    # model = k.models.load_model(modelLoc)
-    # predDir = os.path.join(pwd,"X_Train","data")
-    # for img in os.listdir(predDir):
-    #     toPred = os.path.join(predDir,img)
-    #     x = cv.imread(toPred)
-    #     x = cv.resize(x,model.input.shape[-3:-1])
-    #     x = np.expand_dims(x,axis=0)
-    #     y = model.predict(x)
+    # dataFolder = os.path.join("E:", "UnitySegOutPut", "generatedData1")
+    # # dataFolder = os.path.join("/home", "samiw", "thesis", "data", "UnitySegOutPut","generatedDataCOPY")
     #
-    #     x = np.squeeze(x)
-    #     y = np.squeeze(y)
+    # #######Run Training###########
+    # #runTrainMode(modelArch, categorical, modelSaveFolderName, dataFolder)
     #
-    #     y = dataset.decodeImg2Mask(y)
-    #     cv.imshow("x",x.astype(np.uint8))
-    #     cv.imshow("y",cv.cvtColor(y.astype(np.uint8),cv.COLOR_RGB2BGR))
-    #     cv.waitKey(0)
+    # ###########view outputs of trained model on flood net#########
+    # #visModelOutForFloodNet(modelSaveFolderName,categorical)
+    # visModelOutForSynthData(modelSaveFolderName, dataFolder, categorical)
+
+    ##########################END TRAIN MODE######################################
+    ##############################################################################
+
+    ##############################################################################
+    #########################RUN TEST MODE########################################
+
+    #runTestMode(categorical,modelSaveFolderName)
 
 
-    ########### visuilize prediction on test data set ##########
-    # model = k.models.load_model(modelLoc)
-    # predDir = os.path.join(folderPath, "x")
-    # test = dataset.getPartition(.15, .15)['test']
-    # for img in os.listdir(predDir):
-    #     if img in test:
-    #         toPred = os.path.join(predDir, img)
-    #         x = cv.imread(toPred)
-    #         x = cv.resize(x, model.input.shape[-3:-1])
-    #         x = np.expand_dims(x, axis=0)
-    #         y = model.predict(x)
-    #
-    #         x = np.squeeze(x)
-    #         y = np.squeeze(y)
-    #
-    #         y = dataset.decodeImg2Mask(y)
-    #         cv.imshow("x", x.astype(np.uint8))
-    #         cv.imshow("y", cv.cvtColor(y.astype(np.uint8), cv.COLOR_RGB2BGR))
-    #         cv.waitKey(0)
+    ###read in a stitched pano from the disk####
+    fdir = os.path.join("C:\\", "Users", "samiw", "OneDrive", "Desktop", "Desktop", "VT", "Research", "imageStitch",
+                        "testOutPuts", "full_res")
+
+    xpath = os.path.join(fdir, "X_pano.png")
+    #ypath = os.path.join(fdir, "cm_pano.npy")
+
+    with open("norfolkTestCostMap.npy",'rb') as f:
+        waveFrontMat = np.load(f)
+
+    calc_downSample = 8
+    plottingUpSample = 1 / 2
+    scaleFactor = plottingUpSample * calc_downSample
+
+    resizeH = 980
+    testImgDir = os.path.join("E:\\", "UnitySegOutPut", "testSenario", "x")
+    p = cv.imread(os.path.join(fdir, xpath))
+
+    ######start
+    s = UnityServer.UnityServer()
+    servThread = threading.Thread(target=s.update)
+    servThread.start()
+
+    print("wait to recive first image")
+    while s.state[1] is None:
+        time.sleep(.1)
+    print("got first image")
+
+    while True:
+        img = s.state[1]
+        #cv.imshow('UAV OBS',img)
+        scratch.getLocalPath(p,img,waveFrontMat,calc_downSample)
+
+    ###
+    # nano thesis/code/DeepLearnFinalProject/Driver.py
+    # "C:\Program Files\PuTTY\psftp.exe" samiw@ada.hume.vt.edu - P 2200 - i C:\Users\samiw\OneDrive\Desktop\Desktop\VT\Research\summer2020\raytheonSSHKeys\rayPrivateKeyForUseWithPutty.ppk
+

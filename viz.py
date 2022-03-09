@@ -75,6 +75,7 @@ class imageHelper():
 
         self.model = None
 
+
     def defineEndPoints(self,i,mask,div,img):
 
         xidx = 1
@@ -756,6 +757,7 @@ class imageHelper():
 
 
 if __name__ == '__main__':
+
 
     #todo eventually will need to extend to show ground truth vs pred
     #todo implement generators for the input image (rescale) and output, predicted weight map.

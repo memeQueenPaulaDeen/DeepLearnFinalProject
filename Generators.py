@@ -24,8 +24,13 @@ class DataSet(metaclass=abc.ABCMeta):
 
     def __init__(self,folderPath,X_dir,Y_dir,img_shape,num_cat):
 
-        self.x_path = os.path.join(folderPath,X_dir)
-        self.y_path = os.path.join(folderPath,Y_dir)
+        if folderPath is not None:
+            self.x_path = os.path.join(folderPath,X_dir)
+            self.y_path = os.path.join(folderPath,Y_dir)
+        else:
+            print("No Folder Set for dataset")
+
+
         self.img_shape = img_shape
         self.num_cat = num_cat
 
@@ -63,7 +68,7 @@ class DataSet(metaclass=abc.ABCMeta):
         """Load data set into test train and val dictionary"""
         raise not NotImplementedError
 
-    def decodeImg2Mask(self,pred):
+    def decodeOneHot2Mask(self, pred):
         img2decode = np.argmax(pred,axis=2)
         r = img2decode
         g = copy.deepcopy(img2decode)
@@ -75,7 +80,25 @@ class DataSet(metaclass=abc.ABCMeta):
 
         return np.dstack((r,g,b)).astype(np.uint8)
 
+    def costMapFromEncoded(self, iy, blur_K_size=25, blur_sigma=7):
+        ### Returns the normilized and blured cost map given a cat image mask
 
+        # need to avoid concurrent mod
+        iyc = copy.deepcopy(iy)
+        # the encoding scheme should be ordered such that 0 -> first class in class array and weigh w0 corresponds to c0
+        for enc_val in range(len(self.weights)):
+            iy[iyc == enc_val] = self.weights[enc_val] / max(self.weights)
+
+        iy = cv.GaussianBlur(iy, (blur_K_size, blur_K_size), blur_sigma)
+        return iy
+
+    def scaleNormedCostMap(self,cm):
+        res = cm.astype(np.float32) * max(self.weights)
+        return res
+
+    def scaleNormedCostMapForPlot(self,cm):
+        res = cm.astype(np.float32) *255
+        return res.astype(np.uint8)
 
 class SyntheticDataSet(DataSet):
 
@@ -334,13 +357,7 @@ class RegressionSyntheticGenerator(TemplateGenerator):
             # there is some noise in the unity data so need to infer bad labels
             assert len(iy[iy > self.dataSet.num_cat]) == 0, "data quality get rekt"
 
-            #need to avoid concurrent mod
-            iyc =copy.deepcopy(iy)
-            #the encoding scheme should be ordered such that 0 -> first class in class array and weigh w0 corresponds to c0
-            for enc_val in range(len(self.dataSet.weights)):
-                iy[iyc==enc_val] = self.dataSet.weights[enc_val]/max(self.dataSet.weights)
-
-            iy = cv.GaussianBlur(iy, (25,25), 7)
+            iy = self.dataSet.costMapFromEncoded(iy)
 
 
             x[idx] = ix
