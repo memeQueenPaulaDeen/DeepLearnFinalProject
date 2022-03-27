@@ -1,6 +1,8 @@
 import threading
 import time
 
+from path_plan import WaveFront
+from ImageStitching import ImageStreamStitcher
 
 def visulizeGenCat(gen,d):
     gen.on_epoch_end()
@@ -358,7 +360,7 @@ def visModelOutForSynthData(modelSaveFolderName,dataFolder,categorical):
             cv.imshow("x", cv.cvtColor(x.astype(np.uint8), cv.COLOR_RGB2BGR))
             cv.waitKey(0)
 
-def runTestMode(categorical,modelSaveFolderName):
+def runClassificationOnFolder(categorical, modelSaveFolderName):
     folderPath = os.path.join("E:", "UnitySegOutPut", "testSenario")
 
     # folderPath = os.path.join("/home", "samiw", "thesis", "data", "UnitySegOutPut","generatedDataCOPY")
@@ -408,6 +410,88 @@ def runTestMode(categorical,modelSaveFolderName):
         cv.imshow("x", cv.cvtColor(x, cv.COLOR_RGB2BGR).astype(np.uint8))
         cv.waitKey(1)
 
+def runTestModeFullAuto(modelArch,categorical):
+    img_shape = (480, 480, 3)
+    num_cat = 6
+    batchSize = 4
+    max_epoch = 150
+
+    calc_downSample = 8
+    plottingUpSample = 1 / 2
+
+    dataset = Generators.SyntheticDataSet(None, None, None, img_shape, num_cat)
+
+    pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
+    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    modelLoc = os.path.join(outPutFolderPath, 'model')
+    model = k.models.load_model(modelLoc)
+
+    s = UnityServer.UnityServer()
+    servThread = threading.Thread(target=s.update)
+    servThread.start()
+
+    print("wait to recive first image")
+    while s.state[1] is None:
+        time.sleep(.1)
+    print("got first image")
+
+    def costPredictor(x):
+        x = cv.resize(x, img_shape[:2])
+        x = np.expand_dims(x, axis=0)
+        y = model.predict(x)
+
+        # x = np.squeeze(x)
+        y = np.squeeze(y)
+
+        if categorical:
+            y = dataset.costMapFromEncoded(np.argmax(y, axis=2).astype(np.float32))
+
+        return dataset.scaleNormedCostMap(y)
+
+    streamStitcher = ImageStreamStitcher(isaffine=True)
+    p, cm = streamStitcher.consumeStream(s, costPredictor,max(dataset.weights))
+
+    #dont need the seg model anymore
+    del model
+
+    w = WaveFront(p, cm, dataset, calc_downSample)
+    hm = w.getPCMHeatMapPlot(plottingUpSample)
+    w.manualSetEndPoints(plottingUpSample,
+                         imgPlot=w.getImgAtHeatPlotSize(plottingUpSample),
+                         heatMapPlot=hm,
+                         plotName="wave")
+    w.generateWaveCostMap(plottingUpSample=plottingUpSample,
+                          plotName="WaveFrontHeatMap",
+                          plot=True)
+
+    while not s.done:
+        img = s.state[1]
+        # cv.imshow('UAV OBS',img)
+        localCostMap = w.getLocalCostMapFromTemplate(img, plottingUpSample)
+
+        # simply assume the ugv is in the center of the image alternativly this could be provided by unity or some other module
+        sx = img.shape[WaveFront.xidx] / 2 // w.calc_downSample
+        sy = img.shape[WaveFront.yidx] / 2 // w.calc_downSample
+
+        plot, localPath, done = w.getLocalPathFromLocalCostMap(sx, sy, img, localCostMap)
+
+        if done:
+            print("Goal reched setting done")
+            s.action = 'done'
+
+            #probably a better way to do this but waiting to ensure python sends done before exit
+            time.sleep(1)
+            s.done = True
+
+
+        force = .4
+        delta = np.array(localPath[0]) - np.array([sx, sy])
+        print(delta)
+        # open cv to unity cordinate system adding pi over 2
+        heading = np.rad2deg(np.arctan2(delta[1], delta[0]) + np.pi / 2)
+
+        print(heading)
+        s.action = (heading, force)
 
 if __name__ == "__main__":
     import os
@@ -461,42 +545,64 @@ if __name__ == "__main__":
     ##############################################################################
     #########################RUN TEST MODE########################################
 
-    #runTestMode(categorical,modelSaveFolderName)
+    runTestModeFullAuto(modelArch,categorical)
+
+    #runClassificationOnFolder(categorical, modelSaveFolderName)
 
 
-    ###read in a stitched pano from the disk####
-    fdir = os.path.join("C:\\", "Users", "samiw", "OneDrive", "Desktop", "Desktop", "VT", "Research", "imageStitch",
-                        "testOutPuts", "full_res")
 
-    xpath = os.path.join(fdir, "X_pano.png")
-    #ypath = os.path.join(fdir, "cm_pano.npy")
-
-    with open("norfolkTestCostMap.npy",'rb') as f:
-        waveFrontMat = np.load(f)
-
-    calc_downSample = 8
-    plottingUpSample = 1 / 2
-    scaleFactor = plottingUpSample * calc_downSample
-
-    resizeH = 980
-    testImgDir = os.path.join("E:\\", "UnitySegOutPut", "testSenario", "x")
-    p = cv.imread(os.path.join(fdir, xpath))
-
-    ######start
-    s = UnityServer.UnityServer()
-    servThread = threading.Thread(target=s.update)
-    servThread.start()
-
-    print("wait to recive first image")
-    while s.state[1] is None:
-        time.sleep(.1)
-    print("got first image")
-
-    while True:
-        img = s.state[1]
-        #cv.imshow('UAV OBS',img)
-        scratch.getLocalPath(p,img,waveFrontMat,calc_downSample)
-
+    # fdir = os.path.join("C:\\", "Users", "samiw", "OneDrive", "Desktop", "Desktop", "VT", "Research", "imageStitch",
+    #                     "testOutPuts", "full_res")
+    #
+    # xpath = os.path.join(fdir, "X_pano.png")
+    # pixelCostpath = os.path.join(fdir, "cm_pano.npy")
+    # calc_downSample = 8
+    # plottingUpSample = 1 / 2
+    #
+    # img_shape = (480, 480, 3)
+    # num_cat = 6
+    # d = Generators.SyntheticDataSet(None, None, None, img_shape, num_cat)
+    #
+    # with open(pixelCostpath, 'rb') as f:
+    #     pcm = np.load(f)
+    #
+    # ####DO NOT FEED TO KERAS LIKE THIS
+    # x = cv.imread(xpath)
+    #
+    # w = WaveFront(x, pcm, d, calc_downSample)
+    # w.readWaveCostMapFromFile('norfolkTestCostMap.npy')
+    #
+    # s = UnityServer.UnityServer()
+    # servThread = threading.Thread(target=s.update)
+    # servThread.start()
+    #
+    # print("wait to recive first image")
+    # while s.state[1] is None:
+    #     time.sleep(.1)
+    # print("got first image")
+    #
+    # done =False
+    #
+    # while not done:
+    #     img = s.state[1]
+    #     #cv.imshow('UAV OBS',img)
+    #     localCostMap = w.getLocalCostMapFromTemplate(img, plottingUpSample)
+    #
+    #     #simply assume the ugv is in the center of the image alternativly this could be provided by unity or some other module
+    #     sx = img.shape[WaveFront.xidx] / 2 // w.calc_downSample
+    #     sy = img.shape[WaveFront.yidx] / 2 // w.calc_downSample
+    #
+    #     plot, localPath, done = w.getLocalPathFromLocalCostMap(sx, sy, img, localCostMap)
+    #
+    #     force = .4
+    #     delta = np.array(localPath[0]) - np.array([sx,sy])
+    #     print(delta)
+    #     #open cv to unity cordinate system adding pi over 2
+    #     heading = np.rad2deg(np.arctan2(delta[1],delta[0]) + np.pi/2)
+    #
+    #
+    #     print(heading)
+    #     s.action = (heading,force)
     ###
     # nano thesis/code/DeepLearnFinalProject/Driver.py
     # "C:\Program Files\PuTTY\psftp.exe" samiw@ada.hume.vt.edu - P 2200 - i C:\Users\samiw\OneDrive\Desktop\Desktop\VT\Research\summer2020\raytheonSSHKeys\rayPrivateKeyForUseWithPutty.ppk

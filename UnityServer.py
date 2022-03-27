@@ -29,6 +29,12 @@ class UnityServer():
         self.state = (None,None)
         self.action= (0,0)
 
+        self.imgs2Stitch : list = []
+        self.recivingStitch = True
+
+
+
+
     def update(self, BUFFER_SIZE=2 ** 15):
 
         loc = None
@@ -38,6 +44,7 @@ class UnityServer():
             data = array.array('B', data)
             try:
                 t = bytes(data).decode()
+                print(t[0])
             except UnicodeDecodeError:
                 continue
             if t[0] == 'l':
@@ -46,9 +53,15 @@ class UnityServer():
                 loc = ast.literal_eval(dataIn.decode())
                 self.connection.sendall("ack Loc".encode())
                 #print('recived' + str(loc))
-            elif t[0] == 'p':
+
+            #case where picture is sent if ps then we are in stitching mode
+            #if p is sent then normal generic state update is done
+            elif t[0] == 'p' or t[0] == 's':
+                #ps must be sent first if not sent no stitching
+                if t[0] == 'p':
+                    self.recivingStitch = False
                 size = int(t.split()[1])
-                if self.action is 'reset':
+                if self.action is 'reset' or self.action is 'done':
                     resp = str(self.action)#'expecting image of size ' + str(size)
                 else:
                     resp = str(list(self.action))#'expecting image of size ' + str(size)
@@ -56,9 +69,13 @@ class UnityServer():
                 self.connection.sendall(resp.encode())
                 picIn = self.connection.recv(size)
                 picIn= np.fromstring(picIn, np.uint8)
+                #note read by cv means we are in BGR color
                 iraw = cv2.imdecode(picIn, flags=1)
                 if iraw is not None:
                     img_np = iraw
+                    if self.recivingStitch:
+                        self.imgs2Stitch.append(img_np)
+
                 else:
                     warnings.warn("misformated image sent not updating state")
                 #if img_np is not None:

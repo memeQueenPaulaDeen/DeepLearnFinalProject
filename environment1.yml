@@ -1,8 +1,9 @@
 name: deepLearnHWGeneral
 channels:
-  - conda-forge
   - defaults
   - anaconda
+  - pytorch-lts
+  - conda-forge
 dependencies:
   #- cudnn==8.0.5.39=h36d860d_1 #works but hella slow
   #- cudnn==8.0.5.39=h37a4af2_1 #works but hella slow
@@ -11,7 +12,9 @@ dependencies:
   - cudnn
   - pip
   - graphviz
-  - lap
+  - nomkl
+  #- for linix conda env config vars set LD_LIBRARY_PATH=/home/samiw/anaconda3/envs/deepLearnHWGeneral/lib
+  #Had to seperatly run for superglue: pip3 install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio===0.11.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
   - pip:
     - Keras
     - Keras-Preprocessing
@@ -33,4 +36,3 @@ dependencies:
     - shapely
     - networkx
 
-#for linix conda env config vars set LD_LIBRARY_PATH=/home/samiw/anaconda3/envs/deepLearnHWGeneral/lib
