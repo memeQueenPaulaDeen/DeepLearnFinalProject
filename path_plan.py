@@ -46,6 +46,7 @@ class WaveFront:
         if col - 1 >= 0:
             nextCost = waveCostMap[row, col - 1]
             # we found a better value so we update the wavefront and cost map
+            # Finding the smallest neighbor enforces steepest grad
             if waveCostMap[row, col] > nextCost:
                 result.append((col - 1, row, nextCost))
 
@@ -317,7 +318,12 @@ class WaveFront:
 
             if weightMap is not None:
                 # would this depend on the size? maybe should be weighted by downsaple or something?
-                result = result + weightMap[ypos * self.calc_downSample, xpos * self.calc_downSample]
+                if scaleFactor > 1:
+                    iterxs, iterys = np.linspace(int(pos[0] * self.calc_downSample),int(xpos * self.calc_downSample), self.calc_downSample,endpoint=False), np.linspace(int(pos[1] * self.calc_downSample),int(ypos * self.calc_downSample), self.calc_downSample,endpoint=False)
+                    for j in range(self.calc_downSample):
+                        result = result + weightMap[int(iterys[j]),int(iterxs[j])]
+                else:
+                    result = result + weightMap[ypos * self.calc_downSample, xpos * self.calc_downSample] #I think the mul is good?
 
 
 
@@ -344,7 +350,7 @@ class WaveFront:
         cv.imshow(plotName, toPlot)
         cv.waitKey(cvWaitKey)
         if weightMap is not None:
-            return toPlot, result*self.calc_downSample #I think the mul is good?
+            return toPlot, result
         return toPlot
 
 
@@ -471,7 +477,7 @@ class WaveFront:
 
             if weightMap is not None:
                 # would this depend on the size? maybe should be weighted by downsaple or something?
-                result = result + weightMap[ypos * self.calc_downSample, xpos * self.calc_downSample]
+                result = result + weightMap[ypos * self.calc_downSample, xpos * self.calc_downSample]*calc_downSample
 
             # cv.imshow("SubImagePath", hrxC)
             # cv.waitKey(1)
@@ -494,7 +500,7 @@ if __name__ == '__main__':
     xpath = os.path.join(fdir, "X_pano.png")
     pixelCostpath = os.path.join(fdir, "cm_pano.npy")
     calc_downSample = 8
-    plottingUpSample = 1 / 2
+    plottingUpSample = 1 / 4
 
     img_shape = (480, 480, 3)
     num_cat = 6

@@ -26,7 +26,7 @@ dependencies:
     - scipy
     - tensorboard
     - tensorboard-plugin-wit
-    - tensorflow
+    - tensorflow==2.6.*
     - tensorflow-gpu
     - tensorflow-estimator
     - sklearn

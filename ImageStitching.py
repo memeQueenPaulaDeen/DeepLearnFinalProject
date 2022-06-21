@@ -7,10 +7,11 @@ import time
 
 from SuperGluePretrainedNetwork.SuperGlueTest import SuperGlueMatcher
 
-
+from tensorflow import keras as k
 import sys
 sys.path.append(os.path.join("C:\\","Users","samiw","OneDrive","Desktop","Desktop","VT","Research","imageStitch","SuperPoint","superpoint"))
 from match_features_demo import SuperPointHomo
+from scipy import ndimage as nd
 
 
 
@@ -73,9 +74,110 @@ class ImageStreamStitcher:
 
 
 
+    def consumeFolder(self,dataFolder,costPredictionFunction,dataset,plot =True,resizeH = 980,):
+        # begin image and cost map stitching
+        stitcher = SiftBasedStitcher()
+
+        Hp_old = np.eye(3)
+        p = None
+        cm = None
+        first2WorldFrame = None
+        supPNT = None
+        SGM = None
+        curr = None
+
+        gtcm = None
+
+        pathx = os.path.join(dataFolder,'x')
+        pathy = os.path.join(dataFolder,'y')
+        iNames = sorted(os.listdir(pathx), key=lambda x: int(x.split("_")[1][:-4]))
+        for idx in range(len(iNames)-1):# cond still have things to stitch
+
+            curr = cv.imread(os.path.join(pathx,iNames[idx]))
+            next =  cv.imread(os.path.join(pathx,iNames[idx+1]))
+
+            if p is None:
+                p = curr
 
 
-    def consumeStream(self,s: UnityServer,costPredictionFunction,dsMax,plot =True,resizeH = 980,):
+            ############SIFT################
+            # currKp, currDes = stitcher.getDesAndKp(curr)
+            # nextKp, nextDes = stitcher.getDesAndKp(next)
+            #
+            # H, matches = stitcher.getMatchesAndH(nextDes, currDes, nextKp, currKp,self.isaffine)
+
+            #############superPoints####################
+            # if supPNT is None:
+            #     supPNT = SuperPointHomo(None)
+            #
+            # H, matches, m_kp1, m_kp2 = supPNT.getResultsFromImgs(next, curr, self.isaffine)
+
+            ####superGlue and points####
+            if SGM is None:
+                SGM = SuperGlueMatcher()
+
+            H, mask = SGM.matchImgs(
+                cv.cvtColor(curr, cv.COLOR_BGR2GRAY),
+                cv.cvtColor(next, cv.COLOR_BGR2GRAY),
+                self.isaffine)
+
+
+            ######end H est
+
+            Hp = np.matmul(Hp_old, H)
+
+            if cm is None:
+                cm = costPredictionFunction(cv.cvtColor(curr,cv.COLOR_BGR2RGB))
+
+            cm_next = costPredictionFunction(cv.cvtColor(next,cv.COLOR_BGR2RGB))
+
+            if gtcm is None:
+                # iy = cv.imread(os.path.join(pathy,iNames[idx]))
+                # iy = cv.cvtColor(iy,cv.COLOR_BGR2RGB)
+
+                iy = k.preprocessing.image.load_img(os.path.join(pathy,iNames[idx]))
+                iy = k.preprocessing.image.img_to_array(iy)
+                gtcm =  getPixelCostFromClassGT(iy,dataset)
+                gtcm = dataset.scaleNormedCostMap(gtcm)
+
+            iy = k.preprocessing.image.load_img(os.path.join(pathy, iNames[idx+1]))
+            iy = k.preprocessing.image.img_to_array(iy)
+            gtcm_next = getPixelCostFromClassGT(iy, dataset)
+            gtcm_next = dataset.scaleNormedCostMap(gtcm_next)
+
+            size, offset = ms.calculate_size(p.shape, next.shape, Hp, self.isaffine)
+
+            p, _, _ = ms.merge_images(p, next, Hp, size, offset)
+            gtcm, _, _ = ms.merge_costMaps(gtcm, gtcm_next, Hp, size, offset)
+            cm, Hp, translation = ms.merge_costMaps(cm, cm_next, Hp, size, offset)
+
+
+            Hp_old = Hp
+
+            curr = next
+            if plot:
+
+                cv.imshow("pano", image_resize(p, height=resizeH))
+                cv.imshow("Predicted Cost Map from raw", image_resize(cv.applyColorMap(ms.convert2Img(cm,max(dataset.weights)), cv.COLORMAP_HOT), height=resizeH))
+                cv.imshow("GT Cost Map from raw", image_resize(cv.applyColorMap(ms.convert2Img(gtcm,max(dataset.weights)), cv.COLORMAP_HOT), height=resizeH))
+
+                cv.waitKey(1)
+
+        cm[np.isnan(cm)] = cm[np.logical_not(np.isnan(cm))].max()
+
+        cm[cm == 0] = cm[np.logical_not(np.isnan(cm))].max()
+
+        gtcm[np.isnan(gtcm)] = gtcm[np.logical_not(np.isnan(gtcm))].max()
+
+        gtcm[gtcm == 0] = gtcm[np.logical_not(np.isnan(gtcm))].max()
+
+
+        del SGM
+
+        return p, cm, gtcm
+
+
+    def consumeStream(self,s: UnityServer,costPredictionFunction,dsMax,plot =True,resizeH = 980):
         # begin image and cost map stitching
         stitcher = SiftBasedStitcher()
 
@@ -224,3 +326,26 @@ def homoAug(img,rotMax=5,sheerMax=.03,projDistMax=.03):
     # size, _ = ms.calculate_size((0,0),img.shape,H_aug,False)
     size = (480,480)
     return cv.warpPerspective(img,H_aug,size), H_aug
+
+def getPixelCostFromClassGT(gt_px,dataset):
+    # gt_px = iy.copy()
+    foobarMask = None
+    for mask_val in dataset.mask2class_encoding:
+        if foobarMask is None:
+            foobarMask = np.any(gt_px[:, :] != mask_val, axis=2)
+        else:
+            foobarMask = np.logical_and(foobarMask, np.any(gt_px[:, :] != mask_val, axis=2))
+
+    for mask_val, enc in dataset.mask2class_encoding.items():
+        gt_px[np.all(gt_px == mask_val, axis=2)] = enc
+
+    # ideally we need to figure out how to make unity behave not shadding flat??
+    indices = nd.distance_transform_edt(foobarMask, return_distances=False, return_indices=True)
+    gt_px = gt_px[tuple(indices)]
+
+    # only need one dimension
+    gt_px = gt_px[:, :, 0]
+
+    gt_px = dataset.costMapFromEncoded(gt_px)
+
+    return gt_px

@@ -8,6 +8,7 @@ from abc import abstractmethod
 
 import keras as k
 import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
 import numpy as np
 import cv2 as cv
 import threading
@@ -292,7 +293,8 @@ class CategoricalSyntheticGenerator(TemplateGenerator):
             # there is some noise in the unity data so need to infer bad labels
             assert len(iy[iy > self.dataSet.num_cat]) == 0, "data quality get rekt"
 
-            iy = tf.one_hot(iy, self.dataSet.num_cat)
+            iy = tf.keras.utils.to_categorical(iy, self.dataSet.num_cat)
+            #iy = (np.arange(self.dataSet.num_cat) == iy[...,None]-1).astype(int)
 
             x[idx] = ix
             y[idx] = iy
