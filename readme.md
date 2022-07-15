@@ -12,12 +12,30 @@ This project aims to help find routes of ingress and egress after natural disast
 
 ## Installation
 
+###Download the code
 
-To create conda env
+Start by cloning the repository. The dependencies are managed by anaconda. If you don't already have anaconda, you will need to [download it](https://www.anaconda.com/). Once downloaded, open the "Anaconda Prompt." and CD into the directory you cloned the repo into. 
+
+![image](https://user-images.githubusercontent.com/24756984/179303078-04087ee1-fec4-456b-8c87-1dae1dd9edc9.png)
+
+
+### Create The Conda Environment
+
+To create the conda environment by running the following command:
 conda env create -f environment1.yml
 
-Activate the env
+![image](https://user-images.githubusercontent.com/24756984/179303316-874b6fe7-d225-455a-a947-aa03c610d14a.png)
+
+
+To activate the environment type
+
 conda activate deepLearnHWGeneral
+
+### Download the pretrained models
+
+The pretrained models can be downloaded from here
+
+### Download the Training dataset
 
 download the dataset from [only need train]:
 https://drive.google.com/drive/folders/1sZZMJkbqJNbHgebKvHzcXYZHJd6ss4tH
