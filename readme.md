@@ -6,6 +6,7 @@ This repository works in tandem with the [Unity Flood Simulator](https://github.
 
 This project aims to help find routes of ingress and egress after natural disasters. To this end, a UAV flies over the impacted area, collecting a global map of the disaster zone. The UAV returns to the location of the ground vehicle and helps it navigate within the environment. The process is explained in detail in the demo video below. For more information, also see [my thesis](https://vtechworks.lib.vt.edu/handle/10919/5534/browse?type=author&value=Wood%2C+Sami+Warren)
 
+![image](https://user-images.githubusercontent.com/24756984/179279055-84b8e475-0260-4f62-b5b4-b8096e68276c.png)(https://www.youtube.com/watch?v=vf1dAtUh1BA)
 
 
 
