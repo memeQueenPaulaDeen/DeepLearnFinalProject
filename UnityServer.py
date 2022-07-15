@@ -8,7 +8,6 @@ import ast
 import cv2
 import warnings
 
-import scratch
 import threading
 
 class UnityServer():

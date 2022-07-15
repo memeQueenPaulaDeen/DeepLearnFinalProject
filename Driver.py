@@ -211,10 +211,10 @@ def runTrainMode(modelArch, categorical,modelSaveFolderName,dataFolder,restoreFr
 
 
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
-    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    outPutFolderPath = os.path.join(pwd, "thesisModels1", modelSaveFolderName)
     Path(outPutFolderPath).mkdir(parents=True, exist_ok=True)
 
-    checkPointOutPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName, modelSaveFolderName + "CP")
+    checkPointOutPutFolderPath = os.path.join(pwd, "thesisModels1", modelSaveFolderName, modelSaveFolderName + "CP")
     Path(checkPointOutPutFolderPath).mkdir(parents=True, exist_ok=True)
 
 
@@ -296,7 +296,7 @@ def visModelOutForFloodNet(modelSaveFolderName,categorical):
     dataset = Generators.SyntheticDataSet(None, None, None, img_shape, num_cat)
 
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
-    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    outPutFolderPath = os.path.join(pwd, "thesisModels1", modelSaveFolderName)
     modelLoc = os.path.join(outPutFolderPath, 'model')
     model = k.models.load_model(modelLoc)
     predDir = os.path.join(pwd,"Unlabeled","image")
@@ -391,7 +391,7 @@ def visModelOutForSynthData(modelSaveFolderName,dataFolder,categorical):
     dataset = Generators.SyntheticDataSet(dataFolder, "x", "y", img_shape, num_cat)
 
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
-    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    outPutFolderPath = os.path.join(pwd, "thesisModels1", modelSaveFolderName)
     modelLoc = os.path.join(outPutFolderPath, 'model')
 
     model = k.models.load_model(modelLoc)
@@ -451,7 +451,7 @@ def getEvalMetricsForModel(modelSaveFolderName,dataFolder,categorical):
     dataset = Generators.SyntheticDataSet(dataFolder, "x", "y", img_shape, num_cat)
 
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
-    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    outPutFolderPath = os.path.join(pwd, "thesisModels1", modelSaveFolderName)
     modelLoc = os.path.join(outPutFolderPath, 'model')
 
     model = k.models.load_model(modelLoc)
@@ -536,7 +536,7 @@ def generateateNavResultForAllModelsAtLoc(imgs2ClassFolder,finalSaveName):
         for categorical in categories:
 
             modelSaveFolderName = getSyntheticTrainedModelNames(modelArch, categorical)
-            outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+            outPutFolderPath = os.path.join(pwd, "thesisModels1", modelSaveFolderName)
             modelLoc = os.path.join(outPutFolderPath, 'model')
             model = k.models.load_model(modelLoc)
 
@@ -607,7 +607,7 @@ def fullAutoFolder(modelArch,categorical,imgs2ClassFolder,PanoramaSaveLoc = None
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
 
     modelSaveFolderName = getSyntheticTrainedModelNames(modelArch, categorical)
-    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    outPutFolderPath = os.path.join(pwd, "thesisModels1", modelSaveFolderName)
     modelLoc = os.path.join(outPutFolderPath, 'model')
     model = k.models.load_model(modelLoc)
 
@@ -647,7 +647,7 @@ def runClassificationOnFolder(categorical, modelSaveFolderName,folderPath):
     dataset = Generators.SyntheticDataSet(folderPath, "x", "y", img_shape, num_cat)
 
     pwd = os.path.dirname(os.path.abspath(sys.argv[0]))
-    outPutFolderPath = os.path.join(pwd, "thesisModels", modelSaveFolderName)
+    outPutFolderPath = os.path.join(pwd, "thesisModels1", modelSaveFolderName)
     modelLoc = os.path.join(outPutFolderPath, 'model')
     model = k.models.load_model(modelLoc)
     predDir = os.path.join(folderPath, "x")
@@ -776,7 +776,6 @@ if __name__ == "__main__":
     import Generators
     import Models
     import UnityServer
-    import scratch
 
     import cv2 as cv
     import numpy as np
@@ -809,7 +808,7 @@ if __name__ == "__main__":
     # # dataFolder = os.path.join("/home", "samiw", "thesis", "data", "UnitySegOutPut","generatedDataCOPY")
     #
     # #######Run Training###########
-    runTrainMode(modelArch, categorical, modelSaveFolderName, dataFolder)
+    # runTrainMode(modelArch, categorical, modelSaveFolderName, dataFolder)
     #
     # ###########view outputs of trained model on flood net#########
     # visModelOutForFloodNet(modelSaveFolderName,categorical)
