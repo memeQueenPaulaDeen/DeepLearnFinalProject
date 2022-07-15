@@ -12,14 +12,24 @@ This project aims to help find routes of ingress and egress after natural disast
 
 ## Installation
 
-###Download the code
+### Download the code
 
-Start by cloning the repository. The dependencies are managed by anaconda. If you don't already have anaconda, you will need to [download it](https://www.anaconda.com/). Once downloaded, open the "Anaconda Prompt." and CD into the directory you cloned the repo into. 
+Start by cloning the repository. 
+
+Once the repository has been cloned cd into it with:
+cd DeepLearnFinalProject
+
+![image](https://user-images.githubusercontent.com/24756984/179306221-dcd3d09c-9858-42ef-b98f-5d68f2d964ca.png)
+
+Clone the forked version of the SuperGlue into the project or clone the project with all submodules:
+git clone https://github.com/memeQueenPaulaDeen/SuperGluePretrainedNetwork.git
+
+### Create The Conda Environment
+
+The dependencies are managed by anaconda. If you don't already have anaconda, you will need to [download it](https://www.anaconda.com/). Once downloaded, open the "Anaconda Prompt." and CD into the directory you cloned the repo into. 
 
 ![image](https://user-images.githubusercontent.com/24756984/179303078-04087ee1-fec4-456b-8c87-1dae1dd9edc9.png)
 
-
-### Create The Conda Environment
 
 To create the conda environment by running the following command:
 conda env create -f environment1.yml
@@ -30,6 +40,12 @@ conda env create -f environment1.yml
 To activate the environment type
 
 conda activate deepLearnHWGeneral
+
+Supgerglue requires additional dependencies for pytorch installed through pip:
+pip3 install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio===0.11.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
+
+![image](https://user-images.githubusercontent.com/24756984/179309258-e32f28c1-9e31-4735-8c15-cde0c9763605.png)
+
 
 ### Download the pretrained models
 
