@@ -273,6 +273,10 @@ class CategoricalSyntheticGenerator(TemplateGenerator):
             # there is some noise in the unity data so need to infer bad labels
             # trying to fill by the closest
 
+            # unfortunatly even after cleaning this is still needed as the augmentation process also can change the mask values on the boundary between classes
+            # this has proven to be a fairly effective way to deal with this headache
+            #
+
             foobarMask = None
             for mask_val in self.dataSet.mask2class_encoding:
                 if foobarMask is None:
@@ -291,6 +295,7 @@ class CategoricalSyntheticGenerator(TemplateGenerator):
             iy = iy[:, :, 0]
 
             # there is some noise in the unity data so need to infer bad labels
+            # Or there is noise added durring the augmentation process
             assert len(iy[iy > self.dataSet.num_cat]) == 0, "data quality get rekt"
 
             iy = tf.keras.utils.to_categorical(iy, self.dataSet.num_cat)
@@ -357,6 +362,7 @@ class RegressionSyntheticGenerator(TemplateGenerator):
             iy = iy[:, :, 0]
 
             # there is some noise in the unity data so need to infer bad labels
+            # Or there is noise added durring the augmentation process
             assert len(iy[iy > self.dataSet.num_cat]) == 0, "data quality get rekt"
 
             iy = self.dataSet.costMapFromEncoded(iy)

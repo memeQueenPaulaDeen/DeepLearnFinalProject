@@ -809,7 +809,7 @@ if __name__ == "__main__":
     # # dataFolder = os.path.join("/home", "samiw", "thesis", "data", "UnitySegOutPut","generatedDataCOPY")
     #
     # #######Run Training###########
-    # runTrainMode(modelArch, categorical, modelSaveFolderName, dataFolder)
+    runTrainMode(modelArch, categorical, modelSaveFolderName, dataFolder)
     #
     # ###########view outputs of trained model on flood net#########
     # visModelOutForFloodNet(modelSaveFolderName,categorical)
